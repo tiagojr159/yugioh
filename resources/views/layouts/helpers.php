@@ -1,0 +1,6 @@
+<?php
+$base = rtrim(str_replace('\\','/',dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php')),'/') . '/';
+function icon(string $name): string {
+ $paths=['spark'=>'m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z','sword'=>'m14 4 6-1-1 6-9 9-4-4Zm-9 9 6 6M3 21l4-4','cards'=>'M6 6h12v15H6ZM3 17 1 4l12-2 1 2m5 1 4 2-3 13','arrow'=>'M5 12h14m-5-5 5 5-5 5','cube'=>'m12 3 9 5v9l-9 5-9-5V8Zm0 10 9-5M3 8l9 5v9','camera'=>'M4 7h4l2-3h4l2 3h4v13H4ZM16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0','settings'=>'M9 4h6l1 3 3 1 2 5-2 2-1 4-5 2-3-2-4-1-2-5 2-3 1-4Zm7 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0','close'=>'m6 6 12 12M6 18 18 6','shield'=>'m12 3 8 3v7q0 5-8 9-8-4-8-9V6Z','heart'=>'M12 21C-6 11 5-2 12 7 19-2 30 11 12 21Z','chevron'=>'m9 5 7 7-7 7','volume'=>'M11 4 6 8H2v8h4l5 4ZM16 8q5 4 0 8m3-11q8 7 0 14','book'=>'M3 4q5-2 9 1 4-3 9-1v16q-5-2-9 1-4-3-9-1Zm9 1v16','user'=>'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M4 21v-3q0-5 8-5t8 5v3','bolt'=>'m13 2-9 12h7l-1 8 10-13h-8Z','check'=>'m5 12 4 4 10-10','refresh'=>'M20 10a8 8 0 1 0 0 6m0-13v7h-7','flag'=>'M5 22V3q5-3 9 0t6 0v10q-3 3-6 0t-9 0'];
+ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'.($paths[$name]??$paths['spark']).'"/></svg>';
+}

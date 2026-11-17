@@ -1,0 +1,14 @@
+import {mkdir, writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const root = new URL('../.tools/', import.meta.url);
+await mkdir(root, {recursive:true});
+const releases = await fetch('https://windows.php.net/downloads/releases/releases.json').then(r=>r.json());
+const zip = releases['8.3']['nts-vs16-x64'].zip;
+const bytes = Buffer.from(await fetch(`https://windows.php.net/downloads/releases/${zip.path}`).then(r=>{if(!r.ok)throw Error(r.status);return r.arrayBuffer()}));
+if(createHash('sha256').update(bytes).digest('hex')!==zip.sha256)throw Error('Hash PHP incorreto');
+await writeFile(new URL('php.zip', root), bytes);
+const composer = Buffer.from(await fetch('https://getcomposer.org/download/latest-stable/composer.phar').then(r=>r.arrayBuffer()));
+const expected = (await fetch('https://getcomposer.org/download/latest-stable/composer.phar.sha256sum').then(r=>r.text())).split(/\s/)[0];
+if(createHash('sha256').update(composer).digest('hex')!==expected)throw Error('Hash Composer incorreto');
+await writeFile(new URL('composer.phar',root),composer);
+console.log(`PHP ${releases['8.3'].version} e Composer baixados e verificados.`);

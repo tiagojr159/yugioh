@@ -1,0 +1,41 @@
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ar_card_battle
+      MYSQL_USER: arcana
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD em .env.docker}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Defina DB_ROOT_PASSWORD em .env.docker}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8080:80"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "false"
+      SESSION_SECURE: "false"
+      DB_DRIVER: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: ar_card_battle
+      DB_USERNAME: arcana
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploaded_assets:/var/www/html/public/uploads
+      - session_data:/var/www/html/storage/sessions
+      - log_data:/var/www/html/storage/logs
+volumes:
+  mysql_data:
+  uploaded_assets:
+  session_data:
+  log_data:

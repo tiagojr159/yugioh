@@ -1,0 +1,19 @@
+{
+  "name": "arcana-ar-card-battle",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/vendor.mjs",
+    "check": "node scripts/check.mjs",
+    "assets": "node scripts/artwork.mjs",
+    "start": "node scripts/serve.mjs",
+    "test:api": "node scripts/smoke-api.mjs",
+    "test:ar": "node --test tests/Frontend/ar.test.mjs",
+    "test:install": "node scripts/test-install.mjs"
+  },
+  "dependencies": {
+    "three": "0.164.1",
+    "@ar-js-org/ar.js": "3.4.7"
+  }
+}

@@ -1,0 +1,16 @@
+.git
+.env
+.env.docker
+.tools
+.cache
+node_modules
+vendor
+storage/mysql
+storage/*.sqlite*
+storage/logs/*
+storage/sessions/*
+storage/rate-limits/*
+tests/.runtime
+public/assets/vendor
+public/uploads/*
+!public/uploads/.htaccess

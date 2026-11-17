@@ -1,0 +1,27 @@
+<?php
+use App\Controllers\{AuthController,CardController,DeckController,BattleController,PlayerController,AdminController};
+$router->add('GET','/api/session',[AuthController::class,'session'],false);
+$router->add('POST','/api/auth/register',[AuthController::class,'register'],false);
+$router->add('POST','/api/auth/login',[AuthController::class,'login'],false);
+$router->add('POST','/api/auth/guest',[AuthController::class,'guest'],false);
+$router->add('POST','/api/auth/logout',[AuthController::class,'logout']);
+$router->add('GET','/api/cards',[CardController::class,'index'],false);
+$router->add('GET','/api/cards/{id}',[CardController::class,'show'],false);
+$router->add('GET','/api/decks',[DeckController::class,'index']);
+$router->add('POST','/api/decks',[DeckController::class,'create']);
+$router->add('PUT','/api/decks/{id}',[DeckController::class,'update']);
+$router->add('POST','/api/battles',[BattleController::class,'create']);
+$router->add('GET','/api/battles/{id}',[BattleController::class,'show']);
+$router->add('GET','/api/battles/{id}/history',[BattleController::class,'history']);
+$router->add('POST','/api/battles/{id}/summon',[BattleController::class,'summon']);
+$router->add('POST','/api/battles/{id}/attack',[BattleController::class,'attack']);
+$router->add('POST','/api/battles/{id}/end-turn',[BattleController::class,'endTurn']);
+$router->add('POST','/api/battles/{id}/surrender',[BattleController::class,'surrender']);
+$router->add('GET','/api/players/me',[PlayerController::class,'me']);
+$router->add('GET','/api/players/me/statistics',[PlayerController::class,'statistics']);
+$router->add('GET','/api/players/me/collection',[PlayerController::class,'collection']);
+$router->add('GET','/api/admin/cards',[AdminController::class,'cards'],true,true);
+$router->add('POST','/api/admin/cards',[AdminController::class,'create'],true,true);
+$router->add('PUT','/api/admin/cards/{id}',[AdminController::class,'update'],true,true);
+$router->add('POST','/api/admin/uploads',[AdminController::class,'upload'],true,true);
+$router->add('GET','/api/admin/overview',[AdminController::class,'overview'],true,true);
