@@ -20,6 +20,11 @@ test('O botao Atacar explica por que o toque nao pode atacar e continua responsi
  const s=state();s.active_side='ai';s.player.field=[{id:1,attacked:false}];hud.update(s,cards[0],{name:'Guest'},false,cards);
  assert.equal(elements.get('#attack-button').disabled,false);assert.match(elements.get('#attack-button').title,/Aguarde sua vez/);
 });
+test('Toque em Atacar envia o movimento sem depender de modal na câmera',async()=>{
+ dom();const s=state();s.player.field=[{id:11,name:'Minha criatura',attacked:false}];s.ai.field=[{id:22,name:'Alvo',attacked:false}];
+ const b=new BattleManager({},null,null,null,{cards},()=>{});b.state=s;let submitted;b.action=async(action,data)=>{submitted={action,...data};};
+ await b.chooseAttack();assert.deepEqual(submitted,{action:'attack',attacker_id:11,target_id:22});
+});
 test('Invocacao continua disponivel apos selecionar carta do campo ou carta cara',async()=>{
  dom();const cm={cards,selected:cards[1],select(id){this.selected=cards.find(c=>c.id===id);}};
  const b=new BattleManager({},null,null,null,cm,()=>{});b.state=state();let submitted;b.action=async(action,data)=>submitted={action,...data};

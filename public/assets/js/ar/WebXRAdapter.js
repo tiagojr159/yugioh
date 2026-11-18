@@ -1,4 +1,4 @@
-import {SurfaceDetector} from './SurfaceDetector.js?v=20261118-30';
+import {SurfaceDetector} from './SurfaceDetector.js?v=20261118-31';
 export class WebXRAdapter{
  constructor(arena,message,onExit){this.arena=arena;this.message=message;this.onExit=onExit;}
  static requestSession(){return navigator.xr.requestSession('immersive-ar',{requiredFeatures:['hit-test'],optionalFeatures:['dom-overlay','local-floor'],domOverlay:{root:document.body}});}

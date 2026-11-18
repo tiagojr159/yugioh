@@ -1,13 +1,13 @@
 
-import {Api} from './Api.js?v=20261118-30';
-import {$,escape,number,toast,modal,HUDManager} from './ui/HUDManager.js?v=20261118-30';
-import {ArenaRenderer} from './game/ArenaRenderer.js?v=20261118-30';
+import {Api} from './Api.js?v=20261118-31';
+import {$,escape,number,toast,modal,HUDManager} from './ui/HUDManager.js?v=20261118-31';
+import {ArenaRenderer} from './game/ArenaRenderer.js?v=20261118-31';
 import {CardManager} from './game/CardManager.js';
-import {AnimationManager} from './game/AnimationManager.js?v=20261118-30';
-import {BattleManager} from './game/BattleManager.js?v=20261118-30';
-import {Multiplayer} from './game/Multiplayer.js?v=20261118-30';
-import {VoiceCall} from './game/VoiceCall.js?v=20261118-30';
-import {ARManager} from './ar/ARManager.js?v=20261118-30';
+import {AnimationManager} from './game/AnimationManager.js?v=20261118-31';
+import {BattleManager} from './game/BattleManager.js?v=20261118-31';
+import {Multiplayer} from './game/Multiplayer.js?v=20261118-31';
+import {VoiceCall} from './game/VoiceCall.js?v=20261118-31';
+import {ARManager} from './ar/ARManager.js?v=20261118-31';
 import {TouchControls} from './ui/TouchControls.js';
 const api=new Api(),hud=new HUDManager();let cards=[],user=null,arena,ar,cardManager,animation,battle,multiplayer,voice,activeBattle=null,deckId=null;
 const storage={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};

@@ -1,5 +1,5 @@
-import {$,toast,modal,escape} from '../ui/HUDManager.js';
-import {summonCard,summonReason,attackPreview} from './Combat.js';
+import {$,toast} from '../ui/HUDManager.js';
+import {summonCard,summonReason} from './Combat.js';
 export class BattleManager{
  constructor(api,arena,animation,hud,cardManager,onResult){Object.assign(this,{api,arena,animation,hud,cardManager,onResult});this.state=null;this.busy=false;}
  path(id){return (this.multiplayer?'multiplayer/rooms/':'battles/')+id;}
@@ -33,19 +33,11 @@ export class BattleManager{
   if(s.active_side!=='player'){toast('Aguarde seu turno para atacar.');return;}
   const available=s.player.field.filter(m=>!m.attacked);
   if(!available.length){toast(s.player.field.length?'Todas as suas criaturas já atacaram. Encerre o turno para atacar novamente.':'Invoque uma criatura antes de atacar.');return;}
-  let attacker=available.find(m=>m.id===this.attackerId)||available[0];
-  let target=s.ai.field.find(m=>m.id===targetId)||s.ai.field[0]||null;
-  const choice=(m,enemy=false)=>'<button class="unit-choice attack-choice" data-unit="'+m.id+'"><strong>'+escape(m.name)+'</strong><span>'+m.attack+' ATK · '+m.defense+' DEF</span><small>'+m.hp+' / '+m.max_hp+' HP'+(enemy?'':' · Pronto para atacar')+'</small></button>';
-  modal('Preparar ataque','<p class="form-note">Escolha sua criatura e o alvo. Cada criatura pode atacar uma vez por turno.</p><h3 class="field-label">Sua criatura</h3><div class="turn-choices" id="attacker-choices">'+available.map(m=>choice(m)).join('')+'</div><h3 class="field-label">Alvo adversário</h3><div class="turn-choices" id="target-choices">'+(s.ai.field.length?s.ai.field.map(m=>choice(m,true)).join(''):'<span class="unit-choice selected">'+escape(s.opponent_name||'Sentinela')+' · Ataque direto</span>')+'</div><p class="attack-preview" id="attack-preview" aria-live="polite"></p><button class="button button-gold" id="confirm-attack">Confirmar ataque →</button>');
-  const mark=()=>{
-   document.querySelectorAll('#attacker-choices button').forEach(b=>b.classList.toggle('selected',Number(b.dataset.unit)===attacker.id));
-   document.querySelectorAll('#target-choices button').forEach(b=>b.classList.toggle('selected',Number(b.dataset.unit)===target?.id));
-   const result=attackPreview(attacker,target,s.turn);
-   $('#attack-preview').textContent=target?result.damage+' de dano em '+target.name+(result.defeated?' · Criatura será derrotada':' · Restarão '+Math.max(0,target.hp-result.damage)+' HP')+(result.direct?' · '+result.direct+' de dano direto':''):result.damage+' de dano direto nos pontos de vida do adversário.';
-  };mark();
-  document.querySelectorAll('#attacker-choices button').forEach(b=>b.onclick=()=>{attacker=available.find(m=>m.id===Number(b.dataset.unit));mark();});
-  document.querySelectorAll('#target-choices button').forEach(b=>b.onclick=()=>{target=s.ai.field.find(m=>m.id===Number(b.dataset.unit));mark();});
-  $('#confirm-attack').onclick=()=>{$('#modal').close();this.attackerId=attacker.id;this.targetId=target?.id;this.action('attack',{attacker_id:attacker.id,target_id:target?.id??null});};
+  const attacker=available.find(m=>Number(m.id)===Number(this.attackerId))||available[0];
+  const target=s.ai.field.find(m=>Number(m.id)===Number(targetId))||s.ai.field[0]||null;
+  this.attackerId=attacker.id;this.targetId=target?.id;
+  toast(target?attacker.name+' atacando '+target.name+'.':attacker.name+' atacando diretamente os pontos de vida adversários.');
+  return this.action('attack',{attacker_id:attacker.id,target_id:target?.id??null});
  }
  pickUnit(unit){
   if(unit.side==='player'){this.attackerId=unit.id;toast(unit.name+(unit.attacked?' já atacou. Encerre o turno.':' selecionado. Toque em Atacar.'));this.update();}
