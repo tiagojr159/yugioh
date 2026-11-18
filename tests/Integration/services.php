@@ -35,7 +35,7 @@ test('Sala compartilhada protege o acesso e alterna turnos entre jogadores',func
     $first=$mp->action($id,$userId,'end-turn',['version'=>$first['version']]);same('ai',$first['active_side']);
     rejects(fn()=>$mp->action($id,$userId,'end-turn',['version'=>$first['version']]));
     rejects(fn()=>$mp->action($id,$guest,'end-turn',['version'=>$second['version']]),409);
-    $second=$mp->get($id,$guest);same('player',$second['active_side']);$second=$mp->action($id,$guest,'end-turn',['version'=>$second['version']]);same('ai',$second['active_side']);
+    $second=$mp->get($id,$guest);same('player',$second['active_side']);$cardId=null;foreach($second['player']['hand'] as $held){foreach($second['catalog'] as $card)if((int)$card['id']===(int)$held&&(int)$card['cost']<=(int)$second['player']['energy']){$cardId=$held;break 2;}}check($cardId!==null);$second=$mp->action($id,$guest,'summon',['card_id'=>$cardId,'version'=>$second['version']]);same(1,count($second['player']['field']));$second=$mp->action($id,$guest,'end-turn',['version'=>$second['version']]);same('ai',$second['active_side']);
 });
 test('Convite online é restrito ao destinatário',function()use($userId,$other,$deckId){
     $mp=new App\Services\MultiplayerService();$guest=(int)$other['id'];$mp->presence($guest);$room=$mp->create($userId,['deck_id'=>$deckId,'invite_user_id'=>$guest]);$inbox=$mp->presence($guest);check(count($inbox['invites'])>0);

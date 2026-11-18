@@ -4,7 +4,7 @@ import {CallSocket} from './CallSocket.js';
 export class VoiceCall {
   constructor(api) {
     this.api=api; this.room=null; this.socket=null; this.pc=null; this.local=null;
-    this.remote=document.createElement('audio'); this.remote.autoplay=true; this.remote.playsInline=true; this.remote.style.display='none'; document.body.append(this.remote);
+    this.remote=document.createElement('audio'); this.remote.autoplay=false; this.remote.playsInline=true; this.remote.setAttribute('aria-hidden','true'); Object.assign(this.remote.style,{position:'fixed',width:'1px',height:'1px',opacity:'0',pointerEvents:'none',left:'-10px',bottom:'0'}); document.body.append(this.remote);
     this.pendingCandidates=[]; this.pendingOffer=null; this.callId=0; this.callerRole=''; this.calling=false; this.inCall=false; this.incomingId=0; this.cursor=0; this.polling=false; this.pollTimer=null; this.lastError='';
     this.callButtons=[...document.querySelectorAll('#voice-call-button,#ar-voice-call-button,#room-voice-call-button')]; this.muteButtons=[...document.querySelectorAll('#voice-mute-button,#ar-voice-mute-button,#room-voice-mute-button')];
     this.callButtons.forEach(button=>button.addEventListener('click',()=>this.inCall||this.calling?this.hangup():this.startCall()));
@@ -22,9 +22,13 @@ export class VoiceCall {
     if(!this.room){toast('Entre em uma partida multiplayer ativa para chamar.',true);return;}
     if(this.calling||this.inCall)return;
     try {
+      // Resume Web Audio synchronously in the call-button gesture. Safari may
+      // reject a later remote-audio play() after the signaling round trips.
+      const audioReady=this.prepareAudioOutput();
       await this.ensureMicrophone();
+      await audioReady;
       const call=await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'start'}});
-      this.callId=call.id; this.callerRole=call.role; this.calling=true; this.inCall=true; this.render(); this.makePeer();
+      this.callId=call.id; this.callerRole=call.role; this.calling=true; this.inCall=false; this.render(); this.makePeer();
       const offer=await this.pc.createOffer(); await this.pc.setLocalDescription(offer); await this.signal('offer',this.pc.localDescription.toJSON());
       this.socket?.send({type:'wake'}); this.poll(); toast('Chamando '+this.room.name+'...');
       this.callTimeout=setTimeout(()=>{if(this.callId&&this.pc?.connectionState!=='connected')this.hangup('A chamada nao foi atendida ou nao conectou.');},36000);
@@ -39,16 +43,37 @@ export class VoiceCall {
     if(!navigator.mediaDevices?.getUserMedia)throw Error('Este navegador nao oferece microfone para chamadas.');
     this.local=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
   }
+  prepareAudioOutput() {
+    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+    if(!AudioContextClass)return Promise.resolve(false);
+    try {
+      if(!this.audioContext||this.audioContext.state==='closed')this.audioContext=new AudioContextClass();
+      return this.audioContext.state==='suspended'?this.audioContext.resume().catch(error=>{console.warn('Saída de áudio:',error);return false;}):Promise.resolve(true);
+    } catch(error) { console.warn('Saída de áudio:',error); return Promise.resolve(false); }
+  }
   makePeer() {
     if(this.pc)return this.pc;
     if(!window.RTCPeerConnection)throw Error('Este navegador nao oferece suporte a chamadas de voz.');
     const pc=this.pc=new RTCPeerConnection({iceServers:this.iceServers||[{urls:'stun:stun.l.google.com:19302'}]});
     for(const track of this.local.getTracks())pc.addTrack(track,this.local);
     pc.onicecandidate=e=>{if(e.candidate)this.signal('ice',e.candidate.toJSON()).catch(error=>toast(error.message,true));};
-    pc.ontrack=e=>{this.remote.srcObject=e.streams?.[0]||this.remote.srcObject;this.remote.play().catch(()=>toast('Toque na tela para ativar o audio da chamada.'));};
+    pc.ontrack=e=>{
+      const stream=e.streams?.[0]||(e.track&&window.MediaStream?new MediaStream([e.track]):null);
+      if(!stream)return;
+      this.remote.srcObject=stream;
+      if(this.audioContext&&this.audioContext.state!=='closed'){
+        try {
+          this.remoteSource?.disconnect();
+          this.remoteSource=this.audioContext.createMediaStreamSource(stream);
+          this.remoteGain=this.audioContext.createGain();this.remoteGain.gain.value=1;
+          this.remoteSource.connect(this.remoteGain).connect(this.audioContext.destination);
+          this.audioContext.resume().catch(()=>{});
+        } catch(error) { console.warn('Áudio remoto:',error); this.remote.play().catch(()=>toast('Toque em Ativar áudio para ouvir a chamada.',true)); }
+      } else this.remote.play().catch(()=>toast('Toque em Ativar áudio para ouvir a chamada.',true));
+    };
     pc.onconnectionstatechange=()=>{
       if(pc.connectionState==='connected'){clearTimeout(this.callTimeout);this.calling=false;this.inCall=true;this.render();toast('Chamada de voz conectada.');}
-      else if(pc.connectionState==='failed')toast('Nao foi possivel estabelecer o audio. Confira a rede.',true);
+      else if(pc.connectionState==='failed'){this.calling=false;this.inCall=false;this.render();toast('A chamada nao conectou. A rede pode exigir um servidor TURN para liberar o audio.',true);this.hangup();}
     };
     return pc;
   }
@@ -64,7 +89,7 @@ export class VoiceCall {
   }
   async callState(call) {
     if(this.callId&&Number(call.id)===this.callId) {
-      if(call.status==='accepted'){this.calling=false;this.render();}
+      if(call.status==='accepted'){this.calling=true;this.render();}
       else if(['declined','missed','ended'].includes(call.status)){
         const message=call.status==='declined'?'O outro jogador recusou a chamada.':call.status==='missed'?'O outro jogador nao atendeu.':'A chamada foi encerrada.';
         this.releaseCall();toast(message);
@@ -81,9 +106,11 @@ export class VoiceCall {
   }
   async accept() {
     try {
+      const audioReady=this.prepareAudioOutput();
       await this.ensureMicrophone();
+      await audioReady;
       await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'accept',call_id:this.callId}});
-      document.querySelector('#modal').close();this.inCall=true;this.calling=false;this.makePeer();this.render();
+      document.querySelector('#modal').close();this.inCall=false;this.calling=true;this.makePeer();this.render();
       if(this.pendingOffer){const offer=this.pendingOffer;this.pendingOffer=null;await this.setOffer(offer);}
       await this.flushCandidates();this.socket?.send({type:'wake'});this.poll();
     } catch(error) {toast(error.message||'Nao foi possivel atender a chamada.',true);await this.hangup();}
@@ -97,7 +124,7 @@ export class VoiceCall {
     try {
       if(signal.signal_type==='ice'){if(this.pc?.remoteDescription)await this.pc.addIceCandidate(signal.payload);else if(this.pendingCandidates.length<256)this.pendingCandidates.push(signal.payload);return;}
       if(signal.signal_type==='offer'){if(!this.local){this.pendingOffer=signal.payload;return;}await this.setOffer(signal.payload);return;}
-      if(signal.signal_type==='answer'&&this.pc){await this.pc.setRemoteDescription(signal.payload);await this.flushCandidates();this.inCall=true;this.calling=false;this.render();}
+      if(signal.signal_type==='answer'&&this.pc){await this.pc.setRemoteDescription(signal.payload);await this.flushCandidates();this.calling=true;this.render();}
     } catch(error) {toast(error.message||'Erro ao negociar o audio da chamada.',true);this.hangup();}
   }
   async setOffer(description) {
@@ -123,13 +150,15 @@ export class VoiceCall {
   }
   releaseCall() {
     clearTimeout(this.callTimeout);this.pc?.close();this.pc=null;
+    this.remoteSource?.disconnect();this.remoteSource=null;this.remoteGain?.disconnect();this.remoteGain=null;
+    if(this.audioContext&&this.audioContext.state!=='closed')this.audioContext.close().catch(()=>{});this.audioContext=null;
     for(const track of this.local?.getTracks()||[])track.stop();this.local=null;this.remote.srcObject=null;
     this.pendingCandidates=[];this.pendingOffer=null;this.callId=0;this.callerRole='';this.calling=false;this.inCall=false;this.incomingId=0;this.render();
   }
   render() {
     const ending=this.inCall||this.calling;this.callButtons.forEach(button=>{button.hidden=!this.room;button.disabled=false;button.setAttribute('aria-label',ending?'Encerrar chamada':'Iniciar chamada de voz');button.title=ending?'Encerrar chamada':'Chamar por voz';button.classList.toggle('is-active',ending);});
-    const callStatus=document.querySelector('#duel-room-call-status');if(callStatus&&this.room)callStatus.textContent=this.inCall?'Chamada conectada. Use o botão para encerrar.':this.calling?'Chamando o outro jogador…':'Jogador conectado. Você pode iniciar a chamada de voz.';
-    const muted=this.local?.getAudioTracks().every(track=>!track.enabled)??false;this.muteButtons.forEach(button=>{button.hidden=!this.inCall;button.setAttribute('aria-label',muted?'Ligar microfone':'Silenciar microfone');button.title=button.getAttribute('aria-label');button.classList.toggle('is-muted',muted);});
+    const callStatus=document.querySelector('#duel-room-call-status');if(callStatus&&this.room)callStatus.textContent=this.inCall?'Chamada conectada. Use o botão para encerrar.':this.calling?'Conectando à chamada…':'Jogador conectado. Você pode iniciar a chamada de voz.';
+    const muted=this.local?.getAudioTracks().every(track=>!track.enabled)??false;this.muteButtons.forEach(button=>{button.hidden=!(this.inCall||this.calling)||!this.local;button.setAttribute('aria-label',muted?'Ligar microfone':'Silenciar microfone');button.title=button.getAttribute('aria-label');button.classList.toggle('is-muted',muted);});
   }
   disconnect(){clearInterval(this.pollTimer);this.pollTimer=null;this.socket?.close();this.socket=null;this.releaseCall();this.room=null;if(this.callButton)this.callButton.hidden=true;}
   dispose(){if(this.callId)this.hangup();this.disconnect();this.remote.remove();}

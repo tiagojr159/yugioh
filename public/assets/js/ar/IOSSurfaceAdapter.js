@@ -9,7 +9,7 @@ export class IOSSurfaceAdapter{
  async start(){
   const a=this.arena;this.stopped=false;this.savedCamera=a.camera;
   a.camera=new THREE.PerspectiveCamera();a.board.visible=false;a.stars.visible=false;a.scene.background=null;a.scene.fog=null;a.renderer.setClearColor(0,0);
-  this.reticle=new THREE.Mesh(new THREE.RingGeometry(.085,.105,40).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:'#c8e5b1',side:THREE.DoubleSide}));this.reticle.visible=false;a.scene.add(this.reticle);
+  this.reticle=new THREE.Mesh(new THREE.RingGeometry(.085,.105,40).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:'#ffffff',side:THREE.DoubleSide}));this.reticle.visible=false;a.scene.add(this.reticle);
   const sceneApi={
    initAR(){},
    arSetCameraIntrinsics(){return true;},
@@ -22,8 +22,16 @@ export class IOSSurfaceAdapter{
    onError:error=>console.warn('Rastreamento de superfície:',error.message)
   });
   await this.session.start();if(this.stopped){this.session.stop();throw new DOMException('AR cancelada.','AbortError');}
-  this.video=this.session.video;this.video.className='camera-feed';a.container.prepend(this.video);Object.assign(this.video.style,{opacity:'1',pointerEvents:'none',zIndex:'0'});
+  this.video=this.session.video;this.video.className='camera-feed';this.video.autoplay=true;this.video.playsInline=true;this.video.muted=true;a.container.prepend(this.video);Object.assign(this.video.style,{opacity:'1',pointerEvents:'none',zIndex:'0'});
+  // Safari can pause a live <video> when it is moved from the hidden decode
+  // element into the arena. Reassert playback after attaching it to its final
+  // parent, then wait for decoded frames before hit-testing.
+  await this.video.play?.();
+  if(this.video.readyState<2)await new Promise(resolve=>this.video.addEventListener('loadeddata',resolve,{once:true}));
+  if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
   this.select=event=>{if(event.target!==a.renderer.domElement||!this.reticle.visible||this.placed)return;event.stopPropagation();a.board.position.copy(this.reticle.position);a.board.quaternion.identity();a.board.scale.setScalar(.075);a.board.visible=true;this.placed=true;this.reticle.visible=false;document.getElementById('ar-begin-panel').hidden=!!a.battleState;this.message('Tabuleiro posicionado. Use os controles para jogar.');};
+  this.onVisible=()=>{if(document.visibilityState==='visible'&&!this.stopped){this.video?.play().catch(()=>{});setTimeout(()=>this.update(),180);}};
+  document.addEventListener?.('visibilitychange',this.onVisible);window.addEventListener?.('pageshow',this.onVisible);
   a.container.addEventListener('pointerup',this.select);this.resize();
   document.getElementById('ar-begin-panel').hidden=true;
   this.message('Mova o celular lentamente de um lado para o outro sobre a mesa.');
@@ -35,10 +43,14 @@ export class IOSSurfaceAdapter{
   for(const el of[this.video,a.renderer.domElement])Object.assign(el.style,{position:'absolute',width:w+'px',height:h+'px',left:((r.width-w)/2)+'px',top:((r.height-h)/2)+'px'});
  }
  update(){
-  if(!this.session||this.placed||!this.tracking||!this.video){if(this.reticle&&!this.placed)this.reticle.visible=false;return;}
+  // tinyvio may already have usable planes while its debounced status is still
+  // Limited/Initializing. A status gate here made the iPhone reticle appear
+  // only after restarting the camera. hitTest itself returns no hit until a
+  // real plane and camera pose exist, so it is the correct readiness check.
+  if(!this.session||this.placed||!this.video||this.video.readyState<2||!this.session.appliedIntrinsics){if(this.reticle&&!this.placed)this.reticle.visible=false;return;}
   const r=this.arena.container.getBoundingClientRect(),v=this.video.getBoundingClientRect();const hit=this.session.hitTest(r.left+r.width/2-v.left,r.top+r.height/2-v.top,v.width,v.height).find(h=>h.normal[1]>.8);
   this.reticle.visible=!!hit;if(hit){this.reticle.position.fromArray(hit.position);this.message('Toque no círculo para posicionar o tabuleiro.');}
  }
  reposition(){this.placed=false;this.arena.board.visible=false;document.getElementById('ar-begin-panel').hidden=true;this.message('Mova o celular sobre a mesa e toque no círculo para reposicionar.');}
- async stop(){this.stopped=true;this.arena.container.removeEventListener('pointerup',this.select);this.session?.stop();this.video=null;if(this.reticle){this.reticle.removeFromParent();this.reticle.geometry.dispose();this.reticle.material.dispose();this.reticle=null;}if(this.savedCamera){this.arena.camera=this.savedCamera;this.savedCamera=null;}Object.assign(this.arena.renderer.domElement.style,{width:'100%',height:'100%',left:'0',top:'0'});}
+ async stop(){this.stopped=true;document.removeEventListener?.('visibilitychange',this.onVisible);window.removeEventListener?.('pageshow',this.onVisible);this.arena.container.removeEventListener('pointerup',this.select);this.session?.stop();this.video=null;if(this.reticle){this.reticle.removeFromParent();this.reticle.geometry.dispose();this.reticle.material.dispose();this.reticle=null;}if(this.savedCamera){this.arena.camera=this.savedCamera;this.savedCamera=null;}Object.assign(this.arena.renderer.domElement.style,{width:'100%',height:'100%',left:'0',top:'0'});}
 }

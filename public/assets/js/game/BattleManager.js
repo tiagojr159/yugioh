@@ -11,7 +11,17 @@ export class BattleManager{
   catch(e){toast(e.message,true);if([0,409].includes(e.status)){try{await this.load(this.state.id);toast('Partida sincronizada. Você pode continuar.')}catch{}}}
   finally{this.busy=false;document.body.classList.remove('busy');this.update();}
  }
- summon(){return this.action('summon',{card_id:this.cardManager.selected.id});}
+ summon(){
+  const s=this.state;if(!s||this.busy)return;
+  if(s.status!=='active'){toast('Este duelo já terminou.',true);return;}
+  if(s.active_side!=='player'){toast('Aguarde o seu turno para invocar uma carta.');return;}
+  if(s.player.summoned){toast('Você já invocou uma criatura neste turno.');return;}
+  const selected=this.cardManager.selected;
+  const card=s.player.hand.includes(selected?.id)&&selected.cost<=s.player.energy?selected:s.player.hand.map(id=>this.cardManager.cards.find(c=>c.id===id)).find(c=>c&&c.cost<=s.player.energy);
+  if(!card){toast('Você não tem energia suficiente para invocar uma carta.',true);return;}
+  if(card.id!==selected?.id)this.cardManager.select(card.id);
+  return this.action('summon',{card_id:card.id});
+ }
  chooseAttack(){
   if(!this.state||this.busy)return;const available=this.state.player.field.filter(m=>!m.attacked);if(!available.length)return;
   let attacker=available.find(m=>m.id===this.attackerId)?.id||available[0].id,target=this.state.ai.field[0]?.id||null;
