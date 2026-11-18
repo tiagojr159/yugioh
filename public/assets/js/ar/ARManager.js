@@ -1,6 +1,7 @@
 
 import {WebXRAdapter} from './WebXRAdapter.js';
-import {MarkerARAdapter} from './MarkerARAdapter.js?v=20261118-3';
+import {MarkerARAdapter} from './MarkerARAdapter.js?v=20261118-5';
+import {IOSSurfaceAdapter,requestDeviceMotionPermission} from './IOSSurfaceAdapter.js?v=20261118-5';
 /** Seleção de capacidades, ciclo de câmera e retorno seguro da sessão AR. */
 export class ARManager{
  constructor(arena,cards,onCard,notify){Object.assign(this,{arena,cards,onCard,notify});this.mode='3d';this.operation=0;this.switching=false;this.message=text=>{const el=document.getElementById('ar-instruction');el.textContent=text;el.hidden=!text;};}
@@ -16,12 +17,12 @@ export class ARManager{
   try{
    await this.restore();const caps=await this.capabilities();if(operation!==this.operation)return false;
    if(mode==='webxr'&&!caps.webxr)throw Error('AR de superfície indisponível. Use as cartas com marcadores.');
-   if(mode==='marker'&&!caps.marker)throw Error(caps.secure?'Câmera indisponível neste navegador.':'Abra o jogo por HTTPS para usar a câmera do celular.');
+   if((mode==='marker'||mode==='ios-surface')&&!caps.marker)throw Error(caps.secure?'Câmera indisponível neste navegador.':'Abra o jogo por HTTPS para usar a câmera do celular.');
    this.message('Preparando câmera e rastreamento…');document.body.classList.add('ar-active');document.getElementById('ar-camera-controls').hidden=false;document.getElementById('ar-begin-panel').hidden=!!this.arena.battleState;
-   const adapter=mode==='webxr'?new WebXRAdapter(this.arena,this.message,()=>{if(operation===this.operation&&!this.switching)this.close()}):new MarkerARAdapter(this.arena,this.cards,this.onCard,this.message);
+   const adapter=mode==='webxr'?new WebXRAdapter(this.arena,this.message,()=>{if(operation===this.operation&&!this.switching)this.close()}):mode==='ios-surface'?new IOSSurfaceAdapter(this.arena,this.message):new MarkerARAdapter(this.arena,this.cards,this.onCard,this.message);
    this.adapter=adapter;this.arena.arAdapter=adapter;
    await adapter.start();if(operation!==this.operation){await adapter.stop();return false;}
-   this.mode=mode;this.arena.mode=mode;document.querySelector('#mode-badge span').textContent=mode==='webxr'?'AR · Superfície':'AR · Marcadores';return true;
+   this.mode=mode;this.arena.mode=mode;document.querySelector('#mode-badge span').textContent=mode==='marker'?'AR · Marcadores':'AR · Superfície';return true;
   }catch(e){
    if(operation!==this.operation)return false;
    this.lastError=e;await this.restore();
@@ -30,8 +31,12 @@ export class ARManager{
   }finally{if(operation===this.operation)this.switching=false;}
  }
  async startPreferred(){
+  const ua=navigator.userAgent||'';const ios=/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/i.test(ua)&&navigator.maxTouchPoints>1);
+  // iOS requires this call to occur directly within the user's button tap.
+  const motion=ios&&window.isSecureContext&&navigator.mediaDevices?.getUserMedia?requestDeviceMotionPermission():null;
   const caps=await this.capabilities();
   if(caps.webxr){const operation=this.operation;const ok=await this.setMode('webxr');if(this.operation!==operation+1||ok||this.lastError?.name==='NotAllowedError')return ok;}
+  if(ios&&caps.marker){if(!await motion){this.notify('Autorize o acesso ao movimento do aparelho para reconhecer a mesa.',true);return false;}const operation=this.operation;const ok=await this.setMode('ios-surface');if(this.operation!==operation+1||ok||this.lastError?.name==='NotAllowedError')return ok;this.notify('Rastreamento de mesa indisponível. Use uma carta AR como marcador.',true);}
   if(caps.marker)return this.setMode('marker');
   this.notify(caps.secure?'Abra o jogo em um navegador com câmera: Chrome no Android ou Safari no iPhone compatível.':'A câmera do celular exige uma URL HTTPS válida. Consulte o guia de teste no celular.',true);return false;
  }

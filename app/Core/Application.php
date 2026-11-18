@@ -35,7 +35,7 @@ final class Application
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: same-origin');
-        header('Permissions-Policy: camera=(self), microphone=(), xr-spatial-tracking=(self)');
+        header('Permissions-Policy: camera=(self), microphone=(), accelerometer=(self), gyroscope=(self), xr-spatial-tracking=(self)');
         // AR.js generates JavaScript bindings when the arena initializes its
         // marker tracker. Restrict its required eval permission to this page.
         $wasmPolicy = $path === '/' ? "'unsafe-eval' 'wasm-unsafe-eval'" : "'wasm-unsafe-eval'";
