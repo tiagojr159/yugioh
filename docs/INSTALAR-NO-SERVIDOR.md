@@ -62,3 +62,7 @@ Selecione uma carta na mão e toque em **Invocar**. **Atacar** abre a seleção 
 O código e os testes automatizados estão incluídos no projeto local. O uso físico de câmera, leitura das seis cartas e WebXR ainda precisa ser conferido em aparelhos reais depois do upload. Não foi realizada publicação nesse domínio durante o desenvolvimento.
 
 O painel administrativo fica em **https://ki6.com.br/yugioh/admin**. Use a conta criada no instalador para editar cartas, atributos, imagens e modelos GLB.
+
+## Chamada por voz
+
+A chamada multiplayer usa o daemon WebSocket PHP e a sinalizacao de reserva no banco. Aplique as migracoes 003 e 004 e siga `CHAMADA-POR-VOZ.md` para configurar o socket e o `.env`.

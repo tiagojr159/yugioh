@@ -11,5 +11,5 @@ function same(mixed $expected,mixed $actual): void { check($expected===$actual,'
 function rejects(callable $fn,int $status=422): void { try{$fn();}catch(App\Core\ApiException $e){same($status,$e->status);return;}throw new RuntimeException('Esperava ApiException '.$status); }
 function test(string $name,callable $fn): void { global $passed,$failed;try{$fn();$passed++;echo "✓ $name\n";}catch(Throwable $e){$failed++;echo "✗ $name: ".$e->getMessage()."\n";} }
 $cards=array_column((new App\Repositories\CardRepository())->all(),null,'id');
-require __DIR__.'/Unit/combat.php';require __DIR__.'/Integration/services.php';
+require __DIR__.'/Unit/combat.php';require __DIR__.'/Integration/services.php';require __DIR__.'/Integration/voice.php';
 echo "\n$passed testes passaram; $failed falharam.\n";exit($failed?1:0);

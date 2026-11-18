@@ -35,11 +35,15 @@ final class Application
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: same-origin');
-        header('Permissions-Policy: camera=(self), microphone=(), accelerometer=(self), gyroscope=(self), xr-spatial-tracking=(self)');
+        header('Permissions-Policy: camera=(self), microphone=(self), accelerometer=(self), gyroscope=(self), xr-spatial-tracking=(self)');
         // AR.js generates JavaScript bindings when the arena initializes its
         // marker tracker. Restrict its required eval permission to this page.
         $wasmPolicy = $path === '/' ? "'unsafe-eval' 'wasm-unsafe-eval'" : "'wasm-unsafe-eval'";
-        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' $wasmPolicy; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
+        $connect = "'self' blob:";
+        $voiceUrl = env('VOICE_WS_URL', '');
+        $voiceOrigin = is_string($voiceUrl) ? parse_url($voiceUrl, PHP_URL_SCHEME) : null;
+        if (in_array($voiceOrigin,['ws','wss'],true) && ($host = parse_url($voiceUrl, PHP_URL_HOST))) { $connect .= ' ' . $voiceOrigin . '://' . $host . (parse_url($voiceUrl, PHP_URL_PORT) ? ':' . parse_url($voiceUrl, PHP_URL_PORT) : ''); }
+        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' $wasmPolicy; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src $connect; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
     }
     private function session(): void
     {
