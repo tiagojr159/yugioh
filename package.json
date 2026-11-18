@@ -13,7 +13,7 @@
     "test:install": "node scripts/test-install.mjs"
   },
   "dependencies": {
-    "three": "0.164.1",
-    "@ar-js-org/ar.js": "3.4.7"
+    "@ar-js-org/ar.js": "3.4.8",
+    "three": "0.164.1"
   }
 }

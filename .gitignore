@@ -12,7 +12,8 @@
 !/storage/sessions/.gitkeep
 /storage/rate-limits/*
 !/storage/rate-limits/.gitkeep
-/public/assets/vendor/
+/public/assets/vendor/*
+!/public/assets/vendor/ar-threex.mjs
 /public/uploads/*
 !/public/uploads/.htaccess
 /tests/.runtime/
