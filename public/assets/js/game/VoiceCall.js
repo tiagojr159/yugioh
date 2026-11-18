@@ -6,17 +6,16 @@ export class VoiceCall {
     this.api=api; this.room=null; this.socket=null; this.pc=null; this.local=null;
     this.remote=document.createElement('audio'); this.remote.autoplay=true; this.remote.playsInline=true; this.remote.style.display='none'; document.body.append(this.remote);
     this.pendingCandidates=[]; this.pendingOffer=null; this.callId=0; this.callerRole=''; this.calling=false; this.inCall=false; this.incomingId=0; this.cursor=0; this.polling=false; this.pollTimer=null; this.lastError='';
-    this.callButton=document.querySelector('#voice-call-button'); this.muteButton=document.querySelector('#voice-mute-button');
-    this.callButton?.addEventListener('click',()=>this.inCall||this.calling?this.hangup():this.startCall());
-    this.muteButton?.addEventListener('click',()=>this.toggleMute());
+    this.callButtons=[...document.querySelectorAll('#voice-call-button,#ar-voice-call-button')]; this.muteButtons=[...document.querySelectorAll('#voice-mute-button,#ar-voice-mute-button')];
+    this.callButtons.forEach(button=>button.addEventListener('click',()=>this.inCall||this.calling?this.hangup():this.startCall()));
+    this.muteButtons.forEach(button=>button.addEventListener('click',()=>this.toggleMute()));
   }
   async configure(state) {
     if(!state?.multiplayer||state.status!=='active'||!state.id||!['host','guest'].includes(state.my_role)) { if(this.room)this.hangup(); this.disconnect(); return; }
     const next={id:Number(state.id),key:state.voice_key,role:state.my_role,name:state.opponent_name||'Outro jogador'};
     if(this.room?.id===next.id&&this.room?.key===next.key) { this.room=next; return; }
     this.disconnect(); this.room=next; this.cursor=0; this.iceServers=[{urls:'stun:stun.l.google.com:19302'}];
-    if(this.callButton){this.callButton.hidden=false;this.callButton.disabled=false;}
-    this.socket=new CallSocket(this.api,next.id,{onEvent:e=>{if(e.type==='wake'||e.type==='peer-ready')this.poll();},onStatus:connected=>this.callButton?.classList.toggle('socket-online',connected),onConfig:data=>{if(Array.isArray(data.ice_servers))this.iceServers=data.ice_servers;}});
+    this.socket=new CallSocket(this.api,next.id,{onEvent:e=>{if(e.type==='wake'||e.type==='peer-ready')this.poll();},onStatus:connected=>this.callButtons.forEach(button=>button.classList.toggle('socket-online',connected)),onConfig:data=>{if(Array.isArray(data.ice_servers))this.iceServers=data.ice_servers;}});
     this.pollTimer=setInterval(()=>this.poll(),1300); this.poll(); this.render();
   }
   async startCall() {
@@ -114,7 +113,7 @@ export class VoiceCall {
   toggleMute() {
     if(!this.local)return;const muted=this.local.getAudioTracks().every(track=>!track.enabled);
     for(const track of this.local.getAudioTracks())track.enabled=muted;
-    this.muteButton?.classList.toggle('is-muted',!muted);toast(muted?'Microfone ligado.':'Microfone silenciado.');
+    this.muteButtons.forEach(button=>button.classList.toggle('is-muted',!muted));this.render();toast(muted?'Microfone ligado.':'Microfone silenciado.');
   }
   async hangup(message='Chamada encerrada.') {
     const callId=this.callId;this.releaseCall();
@@ -128,8 +127,8 @@ export class VoiceCall {
     this.pendingCandidates=[];this.pendingOffer=null;this.callId=0;this.callerRole='';this.calling=false;this.inCall=false;this.incomingId=0;this.render();
   }
   render() {
-    if(this.callButton){this.callButton.hidden=!this.room;this.callButton.disabled=false;this.callButton.setAttribute('aria-label',this.inCall||this.calling?'Encerrar chamada':'Iniciar chamada de voz');this.callButton.title=this.inCall||this.calling?'Encerrar chamada':'Chamar por voz';this.callButton.classList.toggle('is-active',this.inCall||this.calling);}
-    if(this.muteButton){this.muteButton.hidden=!this.inCall;const muted=this.local?.getAudioTracks().every(track=>!track.enabled)??false;this.muteButton.setAttribute('aria-label',muted?'Ligar microfone':'Silenciar microfone');this.muteButton.title=this.muteButton.getAttribute('aria-label');this.muteButton.classList.toggle('is-muted',muted);}
+    const ending=this.inCall||this.calling;this.callButtons.forEach(button=>{button.hidden=!this.room;button.disabled=false;button.setAttribute('aria-label',ending?'Encerrar chamada':'Iniciar chamada de voz');button.title=ending?'Encerrar chamada':'Chamar por voz';button.classList.toggle('is-active',ending);});
+    const muted=this.local?.getAudioTracks().every(track=>!track.enabled)??false;this.muteButtons.forEach(button=>{button.hidden=!this.inCall;button.setAttribute('aria-label',muted?'Ligar microfone':'Silenciar microfone');button.title=button.getAttribute('aria-label');button.classList.toggle('is-muted',muted);});
   }
   disconnect(){clearInterval(this.pollTimer);this.pollTimer=null;this.socket?.close();this.socket=null;this.releaseCall();this.room=null;if(this.callButton)this.callButton.hidden=true;}
   dispose(){if(this.callId)this.hangup();this.disconnect();this.remote.remove();}

@@ -11,8 +11,9 @@ final class MultiplayerService
     {
         $pdo=Database::connection();
         foreach(['online_presence','multiplayer_rooms','multiplayer_invites'] as $table){
-            if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$q=$pdo->prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?");$q->execute([$table]);$exists=$q->fetchColumn();}
-            else{$q=$pdo->prepare('SHOW TABLES LIKE ?');$q->execute([$table]);$exists=$q->fetchColumn();}
+            if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$q=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");$q->execute([$table]);}
+            else{$q=$pdo->prepare('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? LIMIT 1');$q->execute([$table]);}
+            $exists=$q->fetchColumn();
             if(!$exists)throw new ApiException('O banco ainda não tem as tabelas do multiplayer. Importe database/migrations/002_multiplayer.sql no phpMyAdmin e tente de novo.',503);
         }
         if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$columns=$pdo->query('PRAGMA table_info(multiplayer_rooms)')->fetchAll(\PDO::FETCH_COLUMN,1);$hasVoiceKey=in_array('voice_key',$columns,true);}
@@ -85,8 +86,9 @@ final class MultiplayerService
     {
         $pdo=Database::connection();
         foreach(['multiplayer_voice_calls','multiplayer_voice_signals'] as $table){
-            if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$q=$pdo->prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?");$q->execute([$table]);$exists=$q->fetchColumn();}
-            else{$q=$pdo->prepare('SHOW TABLES LIKE ?');$q->execute([$table]);$exists=$q->fetchColumn();}
+            if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$q=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");$q->execute([$table]);}
+            else{$q=$pdo->prepare('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? LIMIT 1');$q->execute([$table]);}
+            $exists=$q->fetchColumn();
             if(!$exists)throw new ApiException('Atualize o banco: execute php bin/console.php migrate ou importe database/migrations/004_multiplayer_voice.sql.',503);
         }
     }

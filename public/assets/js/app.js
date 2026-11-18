@@ -6,7 +6,7 @@ import {CardManager} from './game/CardManager.js';
 import {AnimationManager} from './game/AnimationManager.js?v=20261118-7';
 import {BattleManager} from './game/BattleManager.js?v=20261118-9';
 import {Multiplayer} from './game/Multiplayer.js?v=20261118-15';
-import {VoiceCall} from './game/VoiceCall.js?v=20261118-15';
+import {VoiceCall} from './game/VoiceCall.js?v=20261118-16';
 import {ARManager} from './ar/ARManager.js?v=20261118-5';
 import {TouchControls} from './ui/TouchControls.js';
 const api=new Api(),hud=new HUDManager();let cards=[],user=null,arena,ar,cardManager,animation,battle,multiplayer,voice,activeBattle=null,deckId=null;
