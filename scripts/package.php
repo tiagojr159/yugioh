@@ -1,4 +1,3 @@
-
 <?php
 declare(strict_types=1);
 /** Pacote de hospedagem inclui dependências; exclui credenciais e dados locais. */

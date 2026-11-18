@@ -3,6 +3,7 @@
 /.tools/
 /.cache/
 /.env
+/.env.hostgator
 /storage/*.sqlite*
 /storage/mysql/
 /storage/logs/*
