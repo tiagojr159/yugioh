@@ -6,12 +6,13 @@ final class Application
     public function run(): void
     {
         try {
-            $this->headers();
-            $this->session();
             $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
             $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
             if ($base && str_starts_with($path, $base . '/')) { $path = substr($path, strlen($base)); }
-            $request = new Request($_SERVER['REQUEST_METHOD'] ?? 'GET', rtrim($path, '/') ?: '/');
+            $path = rtrim($path, '/') ?: '/';
+            $this->headers($path);
+            $this->session();
+            $request = new Request($_SERVER['REQUEST_METHOD'] ?? 'GET', $path);
             if (!in_array($request->method, ['GET', 'HEAD', 'OPTIONS'], true)) {
                 $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
                 if (!hash_equals($_SESSION['csrf'], $token)) { throw new ApiException('Sua sessão expirou. Recarregue a página.', 419); }
@@ -29,18 +30,15 @@ final class Application
             $this->json(['ok' => false, 'error' => ['message' => 'Não foi possível concluir. Verifique a instalação e tente novamente.', 'reference' => $id]], 500);
         }
     }
-    private function headers(): void
+    private function headers(string $path): void
     {
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: same-origin');
         header('Permissions-Policy: camera=(self), microphone=(), xr-spatial-tracking=(self)');
-        // Safari before iOS 16 does not recognize wasm-unsafe-eval and needs
-        // unsafe-eval to compile WebAssembly. Keep the narrower policy elsewhere.
-        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        $legacyIos = preg_match('/(?:iPhone|iPad|iPod).*?OS (\d+)[_\.]/i', $ua, $match) && (int)$match[1] < 16;
-        $wasmPolicy = $legacyIos ? "'unsafe-eval' 'wasm-unsafe-eval'" : "'wasm-unsafe-eval'";
-        header("Vary: User-Agent", false);
+        // AR.js generates JavaScript bindings when the arena initializes its
+        // marker tracker. Restrict its required eval permission to this page.
+        $wasmPolicy = $path === '/' ? "'unsafe-eval' 'wasm-unsafe-eval'" : "'wasm-unsafe-eval'";
         header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' $wasmPolicy; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
     }
     private function session(): void

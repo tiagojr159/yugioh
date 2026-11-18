@@ -5,7 +5,7 @@ import {ArenaRenderer} from './game/ArenaRenderer.js';
 import {CardManager} from './game/CardManager.js';
 import {AnimationManager} from './game/AnimationManager.js';
 import {BattleManager} from './game/BattleManager.js';
-import {ARManager} from './ar/ARManager.js?v=20261118-2';
+import {ARManager} from './ar/ARManager.js?v=20261118-3';
 import {TouchControls} from './ui/TouchControls.js';
 const api=new Api(),hud=new HUDManager();let cards=[],user=null,arena,ar,cardManager,animation,battle,activeBattle=null,deckId=null;
 const storage={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
