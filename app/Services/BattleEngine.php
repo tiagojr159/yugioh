@@ -15,7 +15,14 @@ final class BattleEngine
     }
     public function summon(array &$s,string $side,int $cardId): void
     {
-        $this->requireTurn($s,$side);$p=&$s[$side];$card=$this->cards[$cardId] ?? null;$index=array_search($cardId,$p['hand'],true);
+        $this->requireTurn($s,$side);$p=&$s[$side];
+        // Rooms saved by older MySQL/PHP versions can contain card IDs as
+        // strings. Normalize both the submitted ID and the persisted hand so
+        // the host and guest follow the same lookup path after a reload.
+        $cardId=(int)$cardId;$p['hand']=array_map('intval',$p['hand']);
+        $card=$this->cards[$cardId] ?? null;
+        if($card===null){foreach($this->cards as $candidate){if((int)($candidate['id']??0)===$cardId){$card=$candidate;break;}}}
+        $index=array_search($cardId,$p['hand'],true);
         if(!$card || $index===false)throw new ApiException('Esta carta não está na sua mão.');
         if($p['summoned'])throw new ApiException('Você já invocou uma criatura neste turno.');
         if(count($p['field'])>=config('game')['max_monsters'])throw new ApiException('Seu campo já tem três criaturas.');
