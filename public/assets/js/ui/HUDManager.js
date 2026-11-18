@@ -19,7 +19,12 @@ export class HUDManager{
   const active=s.status==='active'&&s.active_side==='player'&&!busy;
   const reason=summonReason(s,cards,card,busy),summon=$('#summon-button');
   summon.disabled=!!reason;summon.title=reason||'Invocar uma carta da sua mão';
-  $('#attack-button').disabled=!active||!s.player.field.some(m=>!m.attacked);$('#end-turn-button').disabled=!active;
+  const attack=$('#attack-button'),ready=s.player.field.some(m=>!m.attacked);
+  // Keep attack tappable during an active duel so mobile players get a reason
+  // when it is the opponent's turn or their creatures have already attacked.
+  attack.disabled=s.status!=='active'||busy;
+  attack.title=s.status!=='active'?'O duelo terminou.':busy?'Sincronizando movimento…':s.active_side!=='player'?'Aguarde sua vez.':!s.player.field.length?'Invoque uma criatura antes de atacar.':!ready?'Todas as suas criaturas já atacaram. Encerre o turno.':'Escolher criatura e alvo para atacar.';
+  $('#end-turn-button').disabled=!active;
   $('#end-turn-button').classList.toggle('next-step',active&&s.player.summoned&&!s.player.field.some(m=>!m.attacked));
   $('#arena-tip').textContent=reason||(s.player.summoned?'Toque em Atacar ou selecione um alvo no tabuleiro.':'Sua vez: escolha uma carta e toque em Invocar.');
   const hint=$('#hand-hint');if(hint)hint.textContent=s.active_side==='player'?'Sua vez · 1 invocação e 1 ataque por criatura':(s.opponent_name||'Adversário')+' está jogando';

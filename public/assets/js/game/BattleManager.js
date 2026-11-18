@@ -32,7 +32,7 @@ export class BattleManager{
   const s=this.state;if(!s||this.busy||s.status!=='active')return;
   if(s.active_side!=='player'){toast('Aguarde seu turno para atacar.');return;}
   const available=s.player.field.filter(m=>!m.attacked);
-  if(!available.length){toast('Invoque uma criatura ou encerre o turno para atacar novamente.');return;}
+  if(!available.length){toast(s.player.field.length?'Todas as suas criaturas já atacaram. Encerre o turno para atacar novamente.':'Invoque uma criatura antes de atacar.');return;}
   let attacker=available.find(m=>m.id===this.attackerId)||available[0];
   let target=s.ai.field.find(m=>m.id===targetId)||s.ai.field[0]||null;
   const choice=(m,enemy=false)=>'<button class="unit-choice attack-choice" data-unit="'+m.id+'"><strong>'+escape(m.name)+'</strong><span>'+m.attack+' ATK · '+m.defense+' DEF</span><small>'+m.hp+' / '+m.max_hp+' HP'+(enemy?'':' · Pronto para atacar')+'</small></button>';

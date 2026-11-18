@@ -5,14 +5,21 @@ import {VoiceCall} from '../../public/assets/js/game/VoiceCall.js';
 import {BattleManager} from '../../public/assets/js/game/BattleManager.js';
 import {summonReason,attackPreview} from '../../public/assets/js/game/Combat.js';
 import {AnimationManager} from '../../public/assets/js/game/AnimationManager.js';
+import {HUDManager} from '../../public/assets/js/ui/HUDManager.js';
 
-const element=()=>({hidden:false,style:{},textContent:'',setAttribute(){},classList:{toggle(){}},append(){},remove(){},pause(){},async play(){this.played=true;}});
+const element=()=>({hidden:false,disabled:false,style:{},textContent:'',innerHTML:'',firstChild:{textContent:''},setAttribute(){},classList:{toggle(){}},append(){},remove(){},pause(){},async play(){this.played=true;}});
 function dom(){
  const elements=new Map();globalThis.document={hidden:false,body:{append(){},classList:{add(){},remove(){}}},createElement:element,querySelectorAll:()=>[],querySelector:key=>{if(!elements.has(key))elements.set(key,element());return elements.get(key);},addEventListener(){},removeEventListener(){}};
  globalThis.window={};globalThis.matchMedia=()=>({matches:false});return elements;
 }
 const cards=[{id:1,cost:2},{id:2,cost:4},{id:3,cost:3}];
 const state=()=>({id:9,status:'active',version:1,turn:1,active_side:'player',opponent_name:'Outro jogador',player:{hand:[1,2,3],energy:3,field:[],summoned:false},ai:{field:[]}});
+test('O botao Atacar explica por que o toque nao pode atacar e continua responsivo',()=>{
+ const elements=dom(),hud=new HUDManager();hud.update(state(),cards[0],{name:'Host'},false,cards);
+ assert.equal(elements.get('#attack-button').disabled,false);assert.match(elements.get('#attack-button').title,/Invoque uma criatura/);
+ const s=state();s.active_side='ai';s.player.field=[{id:1,attacked:false}];hud.update(s,cards[0],{name:'Guest'},false,cards);
+ assert.equal(elements.get('#attack-button').disabled,false);assert.match(elements.get('#attack-button').title,/Aguarde sua vez/);
+});
 test('Invocacao continua disponivel apos selecionar carta do campo ou carta cara',async()=>{
  dom();const cm={cards,selected:cards[1],select(id){this.selected=cards.find(c=>c.id===id);}};
  const b=new BattleManager({},null,null,null,cm,()=>{});b.state=state();let submitted;b.action=async(action,data)=>submitted={action,...data};
