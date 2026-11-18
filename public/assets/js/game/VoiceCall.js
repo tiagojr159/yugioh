@@ -6,7 +6,7 @@ export class VoiceCall {
     this.api=api; this.room=null; this.socket=null; this.pc=null; this.local=null;
     this.remote=document.createElement('audio'); this.remote.autoplay=true; this.remote.playsInline=true; this.remote.style.display='none'; document.body.append(this.remote);
     this.pendingCandidates=[]; this.pendingOffer=null; this.callId=0; this.callerRole=''; this.calling=false; this.inCall=false; this.incomingId=0; this.cursor=0; this.polling=false; this.pollTimer=null; this.lastError='';
-    this.callButtons=[...document.querySelectorAll('#voice-call-button,#ar-voice-call-button')]; this.muteButtons=[...document.querySelectorAll('#voice-mute-button,#ar-voice-mute-button')];
+    this.callButtons=[...document.querySelectorAll('#voice-call-button,#ar-voice-call-button,#room-voice-call-button')]; this.muteButtons=[...document.querySelectorAll('#voice-mute-button,#ar-voice-mute-button,#room-voice-mute-button')];
     this.callButtons.forEach(button=>button.addEventListener('click',()=>this.inCall||this.calling?this.hangup():this.startCall()));
     this.muteButtons.forEach(button=>button.addEventListener('click',()=>this.toggleMute()));
   }
@@ -128,6 +128,7 @@ export class VoiceCall {
   }
   render() {
     const ending=this.inCall||this.calling;this.callButtons.forEach(button=>{button.hidden=!this.room;button.disabled=false;button.setAttribute('aria-label',ending?'Encerrar chamada':'Iniciar chamada de voz');button.title=ending?'Encerrar chamada':'Chamar por voz';button.classList.toggle('is-active',ending);});
+    const callStatus=document.querySelector('#duel-room-call-status');if(callStatus&&this.room)callStatus.textContent=this.inCall?'Chamada conectada. Use o botão para encerrar.':this.calling?'Chamando o outro jogador…':'Jogador conectado. Você pode iniciar a chamada de voz.';
     const muted=this.local?.getAudioTracks().every(track=>!track.enabled)??false;this.muteButtons.forEach(button=>{button.hidden=!this.inCall;button.setAttribute('aria-label',muted?'Ligar microfone':'Silenciar microfone');button.title=button.getAttribute('aria-label');button.classList.toggle('is-muted',muted);});
   }
   disconnect(){clearInterval(this.pollTimer);this.pollTimer=null;this.socket?.close();this.socket=null;this.releaseCall();this.room=null;if(this.callButton)this.callButton.hidden=true;}
