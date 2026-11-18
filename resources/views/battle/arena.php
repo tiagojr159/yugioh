@@ -16,4 +16,4 @@
 </main>
 <div class="toast-stack" id="toasts" aria-live="polite"></div>
 <dialog id="modal"><div class="modal-header"><div><p class="eyebrow">ARCANA / SEU UNIVERSO</p><h2 id="modal-title"></h2></div><button class="icon-button" id="modal-close" aria-label="Fechar"><?= icon('close') ?></button></div><div id="modal-content"></div></dialog>
-<script>window.ARCANA_VOICE_WS_URL=<?= json_encode(env('VOICE_WS_URL',''), JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;</script><script type="module" src="assets/js/app.js?v=20261118-17"></script></body></html>
+<script>window.ARCANA_VOICE_WS_URL=<?= json_encode(env('VOICE_WS_URL',''), JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;</script><script type="module" src="assets/js/app.js?v=20261118-18"></script></body></html>

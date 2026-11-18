@@ -5,7 +5,7 @@ import {ArenaRenderer} from './game/ArenaRenderer.js?v=20261118-12';
 import {CardManager} from './game/CardManager.js';
 import {AnimationManager} from './game/AnimationManager.js?v=20261118-7';
 import {BattleManager} from './game/BattleManager.js?v=20261118-9';
-import {Multiplayer} from './game/Multiplayer.js?v=20261118-15';
+import {Multiplayer} from './game/Multiplayer.js?v=20261118-16';
 import {VoiceCall} from './game/VoiceCall.js?v=20261118-16';
 import {ARManager} from './ar/ARManager.js?v=20261118-5';
 import {TouchControls} from './ui/TouchControls.js';
