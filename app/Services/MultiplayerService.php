@@ -71,7 +71,12 @@ final class MultiplayerService
             if($r['invited_id']!==null&&(int)$r['invited_id']!==$user)throw new ApiException('Esta sala é reservada ao jogador convidado.',403);
             if($invite){$q=$pdo->prepare("SELECT id FROM multiplayer_invites WHERE room_id=? AND recipient_id=? AND status='pending' AND created_at>=?");$q->execute([$id,$user,time()-86400]);if(!$q->fetch())throw new ApiException('Convite indisponível.',403);}
             else{ $token=$data['token']??'';if(!is_string($token)||!hash_equals($r['token_hash'],hash('sha256',$token)))throw new ApiException('Link de convite inválido.',403); }
-            $cards=(new CardRepository())->all();$snapshot=array_column($cards,null,'id');$state=(new BattleEngine($snapshot))->start($this->deck((int)$r['host_id'],(int)$r['host_deck']),$guestDeck);$state['card_snapshot']=$snapshot;
+            $cards=(new CardRepository())->all();$snapshot=array_column($cards,null,'id');$state=(new BattleEngine($snapshot))->start($this->deck((int)$r['host_id'],(int)$r['host_deck']),$guestDeck);
+            // Give the invited player the opening move. This makes the guest's
+            // first view an actionable turn instead of a disabled hand waiting
+            // for the host to discover and pass the turn.
+            $state['active_side']='ai';foreach($state['events'] as &$event)if(($event['type']??'')==='turn')$event['side']='ai';unset($event);
+            $state['card_snapshot']=$snapshot;
             $pdo->prepare("UPDATE multiplayer_rooms SET guest_id=?,status='active',state_json=?,version=version+1,updated_at=? WHERE id=?")->execute([$user,json_encode($state,JSON_THROW_ON_ERROR),time(),$id]);
             $pdo->prepare("UPDATE multiplayer_invites SET status='accepted' WHERE room_id=? AND recipient_id=? AND status='pending'")->execute([$id,$user]);return $this->view($this->room($id),$user);
         });

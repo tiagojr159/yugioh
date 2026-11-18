@@ -29,13 +29,16 @@ test('Sala compartilhada protege o acesso e alterna turnos entre jogadores',func
     $room=$mp->create($userId,['deck_id'=>$deckId]);$id=$room['id'];
     rejects(fn()=>$mp->join($id,$guest,['deck_id'=>$guestDeck,'token'=>'incorreto']),403);
     $second=$mp->join($id,$guest,['deck_id'=>$guestDeck,'token'=>$room['token']]);$first=$mp->get($id,$userId);
-    same('player',$first['active_side']);same('ai',$second['active_side']);check(!isset($first['ai']['hand'],$second['ai']['hand'],$first['ai']['deck']));
+    same('ai',$first['active_side']);same('player',$second['active_side']);check(!isset($first['ai']['hand'],$second['ai']['hand'],$first['ai']['deck']));
     rejects(fn()=>$mp->get($id,$third['id']),403);rejects(fn()=>$mp->join($id,$third['id'],['deck_id'=>$thirdDeck,'token'=>$room['token']]),409);
-    rejects(fn()=>$mp->action($id,$guest,'end-turn',['version'=>$second['version']]));
-    $first=$mp->action($id,$userId,'end-turn',['version'=>$first['version']]);same('ai',$first['active_side']);
     rejects(fn()=>$mp->action($id,$userId,'end-turn',['version'=>$first['version']]));
-    rejects(fn()=>$mp->action($id,$guest,'end-turn',['version'=>$second['version']]),409);
-    $second=$mp->get($id,$guest);same('player',$second['active_side']);$cardId=null;foreach($second['player']['hand'] as $held){foreach($second['catalog'] as $card)if((int)$card['id']===(int)$held&&(int)$card['cost']<=(int)$second['player']['energy']){$cardId=$held;break 2;}}check($cardId!==null);$second=$mp->action($id,$guest,'summon',['card_id'=>$cardId,'version'=>$second['version']]);same(1,count($second['player']['field']));$second=$mp->action($id,$guest,'end-turn',['version'=>$second['version']]);same('ai',$second['active_side']);
+    $cardId=null;foreach($second['player']['hand'] as $held){foreach($second['catalog'] as $card)if((int)$card['id']===(int)$held&&(int)$card['cost']<=(int)$second['player']['energy']){$cardId=$held;break 2;}}check($cardId!==null);
+    $second=$mp->action($id,$guest,'summon',['card_id'=>$cardId,'version'=>$second['version']]);same(1,count($second['player']['field']));
+    $second=$mp->action($id,$guest,'attack',['attacker_id'=>$second['player']['field'][0]['id'],'version'=>$second['version']]);check($second['ai']['hp']<4000);check(count(array_filter($second['events'],fn($event)=>$event['type']==='attack'))===1);
+    $second=$mp->action($id,$guest,'end-turn',['version'=>$second['version']]);same('ai',$second['active_side']);
+    $first=$mp->get($id,$userId);same('player',$first['active_side']);$hostCard=null;foreach($first['player']['hand'] as $held){foreach($first['catalog'] as $card)if((int)$card['id']===(int)$held&&(int)$card['cost']<=(int)$first['player']['energy']){$hostCard=$held;break 2;}}check($hostCard!==null);
+    $first=$mp->action($id,$userId,'summon',['card_id'=>$hostCard,'version'=>$first['version']]);$first=$mp->action($id,$userId,'attack',['attacker_id'=>$first['player']['field'][0]['id'],'target_id'=>$first['ai']['field'][0]['id'],'version'=>$first['version']]);check(count(array_filter($first['events'],fn($event)=>$event['type']==='attack'))===1);$first=$mp->action($id,$userId,'end-turn',['version'=>$first['version']]);same('ai',$first['active_side']);
+    $second=$mp->get($id,$guest);same('player',$second['active_side']);
 });
 test('Convite online é restrito ao destinatário',function()use($userId,$other,$deckId){
     $mp=new App\Services\MultiplayerService();$guest=(int)$other['id'];$mp->presence($guest);$room=$mp->create($userId,['deck_id'=>$deckId,'invite_user_id'=>$guest]);$inbox=$mp->presence($guest);check(count($inbox['invites'])>0);
