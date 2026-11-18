@@ -1,17 +1,35 @@
 import * as THREE from 'three';
 import {CameraManager} from './CameraManager.js';
+export async function checkTrackerSupport(){
+ if(typeof WebAssembly==='undefined')throw Error('Este navegador não oferece suporte ao rastreador AR. Atualize o iOS e o Safari.');
+ try{await WebAssembly.compile(new Uint8Array([0,97,115,109,1,0,0,0]));}
+ catch(error){console.error('Falha ao iniciar WebAssembly para AR:',error);throw Error('O Safari bloqueou o rastreador AR. Atualize o iOS e recarregue o jogo.');}
+}
+export function initializeTracker(context,timeout=30000){
+ return new Promise((resolve,reject)=>{
+  let finished=false;
+  const fail=error=>{if(finished)return;finished=true;clearTimeout(timer);console.error('Falha na inicialização do rastreador AR:',error);const detail=String(error?.message||error||'erro desconhecido').slice(0,150);reject(Error('Falha ao iniciar o rastreador AR: '+detail));};
+  const timer=setTimeout(()=>fail(Error('tempo esgotado')),timeout);
+  try{
+   const initialize=context._initArtoolkit.bind(context);
+   context._initArtoolkit=(...args)=>{const result=initialize(...args);if(result?.catch)result.catch(fail);return result;};
+   context.init(()=>{if(finished){context.dispose();return;}finished=true;clearTimeout(timer);resolve();});
+  }catch(error){fail(error);}
+ });
+}
 export class MarkerARAdapter{
  constructor(arena,cards,onFound,message){this.arena=arena;this.cards=cards;this.onFound=onFound;this.message=message;this.camera=new CameraManager();this.anchors=[];this.controls=[];}
  async start(){
   this.stopped=false;
-  const video=await this.camera.start(this.arena.container);if(this.stopped)throw new DOMException('AR cancelada.','AbortError');const {ArToolkitContext,ArMarkerControls}=await import('../../vendor/ar-threex.mjs');if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
+  await checkTrackerSupport();if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
+  const video=await this.camera.start(this.arena.container);if(this.stopped)throw new DOMException('AR cancelada.','AbortError');this.message('Câmera aberta. Carregando o rastreador AR…');const {ArToolkitContext,ArMarkerControls}=await import('../../vendor/ar-threex.mjs');if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
   // AR.js's phone profile is 320x240. Safari on iPhone can stall while
   // allocating its tracker at desktop-sized resolutions although the camera
   // stream is already live.
   const userAgent=navigator.userAgent||'';const isAppleMobile=/iPhone|iPad|iPod/i.test(userAgent)||(/Macintosh/i.test(userAgent)&&navigator.maxTouchPoints>1);
   const trackingLimit=isAppleMobile?320:((navigator.hardwareConcurrency||8)<=4?480:640);const factor=trackingLimit/Math.max(video.videoWidth||640,video.videoHeight||480);const trackingWidth=Math.round((video.videoWidth||640)*factor),trackingHeight=Math.round((video.videoHeight||480)*factor);
   this.context=new ArToolkitContext({cameraParametersUrl:new URL('assets/vendor/camera_para.dat',document.baseURI).href,detectionMode:'mono',maxDetectionRate:isAppleMobile?15:((navigator.hardwareConcurrency||8)<=4?15:24),canvasWidth:trackingWidth,canvasHeight:trackingHeight,patternRatio:.5,imageSmoothingEnabled:true});
-  await new Promise((resolve,reject)=>{let done=false;const t=setTimeout(()=>{if(!done)reject(Error('Não foi possível carregar o rastreador AR. A arena 3D continua disponível.'));},30000);this.context.init(()=>{done=true;clearTimeout(t);resolve();});});
+  await initializeTracker(this.context);
   if(this.stopped)throw new DOMException('AR cancelada.','AbortError');this.savedCamera=this.arena.camera;this.arena.camera=new THREE.Camera();this.arena.camera.projectionMatrix.copy(this.context.getProjectionMatrix());this.arena.camera.projectionMatrixInverse.copy(this.arena.camera.projectionMatrix).invert();this.arena.board.visible=false;this.arena.stars.visible=false;this.arena.scene.background=null;this.arena.scene.fog=null;this.arena.renderer.setClearColor(0,0);this.message(isAppleMobile?'Rastreador pronto. Preparando as criaturas…':'Preparando os marcadores das cartas…');
   for(const card of this.cards){const anchor=new THREE.Group();this.arena.scene.add(anchor);const root=await this.arena.monsters.create(card,{procedural:isAppleMobile});if(this.stopped){this.arena.monsters.dispose(root);anchor.removeFromParent();throw new DOMException('AR cancelada.','AbortError');}root.scale.setScalar(.4);anchor.add(root);const u={root};this.arena.updateLabel(u,{name:card.name,hp:card.hp,max_hp:card.hp,attack:card.attack},'player');const control=new ArMarkerControls(this.context,anchor,{type:'pattern',patternUrl:new URL(card.marker_url,document.baseURI).href,size:1,smooth:true,smoothCount:4,smoothTolerance:.01,smoothThreshold:2});this.anchors.push({anchor,root,label:u.label,card,wasVisible:false});this.controls.push(control);}
   if(this.arena.battleState)this.syncState(this.arena.battleState);this.resize();this.message('Mostre uma das seis cartas AR: impressa ou em outra tela. Mantenha o quadrado inteiro visível.');

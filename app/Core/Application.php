@@ -35,7 +35,13 @@ final class Application
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: same-origin');
         header('Permissions-Policy: camera=(self), microphone=(), xr-spatial-tracking=(self)');
-        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
+        // Safari before iOS 16 does not recognize wasm-unsafe-eval and needs
+        // unsafe-eval to compile WebAssembly. Keep the narrower policy elsewhere.
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $legacyIos = preg_match('/(?:iPhone|iPad|iPod).*?OS (\d+)[_\.]/i', $ua, $match) && (int)$match[1] < 16;
+        $wasmPolicy = $legacyIos ? "'unsafe-eval' 'wasm-unsafe-eval'" : "'wasm-unsafe-eval'";
+        header("Vary: User-Agent", false);
+        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' $wasmPolicy; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
     }
     private function session(): void
     {
