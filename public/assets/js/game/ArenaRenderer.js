@@ -23,14 +23,23 @@ export class ArenaRenderer{
   const positions=new Float32Array(180*3);for(let i=0;i<180;i++){positions[i*3]=(Math.random()-.5)*23;positions[i*3+1]=Math.random()*7-.7;positions[i*3+2]=(Math.random()-.5)*23;}const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));this.stars=new THREE.Points(geometry,new THREE.PointsMaterial({color:'#b9c9b4',size:.025,transparent:true,opacity:.6}));this.scene.add(this.stars);
  }
  addOpponent(){
-  // Ilustração do adversário fora da borda do tabuleiro, acompanhando sua posição em AR.
-  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=384;const c=canvas.getContext('2d');
-  c.fillStyle='#273846';c.beginPath();c.moveTo(76,180);c.quadraticCurveTo(47,188,39,244);c.lineTo(25,325);c.quadraticCurveTo(24,337,40,341);c.lineTo(61,268);c.lineTo(65,374);c.lineTo(191,374);c.lineTo(195,268);c.lineTo(216,341);c.quadraticCurveTo(232,337,231,325);c.lineTo(217,244);c.quadraticCurveTo(209,188,180,180);c.closePath();c.fill();
-  c.fillStyle='#b99b83';c.fillRect(109,153,38,39);c.beginPath();c.ellipse(128,103,51,66,0,0,Math.PI*2);c.fill();
-  c.fillStyle='#303039';c.beginPath();c.ellipse(128,76,52,40,0,Math.PI,Math.PI*2);c.lineTo(180,104);c.quadraticCurveTo(165,83,156,74);c.quadraticCurveTo(125,96,77,86);c.closePath();c.fill();
-  c.fillStyle='#343039';c.beginPath();c.arc(110,110,3,0,Math.PI*2);c.arc(146,110,3,0,Math.PI*2);c.fill();c.strokeStyle='#785e55';c.lineWidth=3;c.beginPath();c.arc(128,128,13,.2,Math.PI-.2);c.stroke();
-  c.fillStyle='#a6c5bd';c.beginPath();c.moveTo(105,187);c.lineTo(128,214);c.lineTo(151,187);c.lineTo(140,178);c.lineTo(128,190);c.lineTo(116,178);c.closePath();c.fill();
-  const texture=new THREE.CanvasTexture(canvas);this.opponentTexture=texture;texture.colorSpace=THREE.SRGBColorSpace;const avatar=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthWrite:false}));avatar.position.set(0,1.5,-5.35);avatar.scale.set(2,3,1);this.board.add(avatar);
+  // Adversário sentado numa cadeira no lado oposto da mesa, em escala de pessoa.
+  const canvas=document.createElement('canvas');canvas.width=384;canvas.height=768;const c=canvas.getContext('2d');
+  c.fillStyle='#4c4036';c.beginPath();c.roundRect(54,260,276,344,34);c.fill();c.fillStyle='#78634e';c.beginPath();c.roundRect(76,280,232,286,23);c.fill();
+  c.fillStyle='#48372b';c.fillRect(47,288,19,330);c.fillRect(318,288,19,330);c.fillRect(79,575,14,173);c.fillRect(291,575,14,173);c.fillRect(50,603,284,17);
+  const jacket=c.createLinearGradient(83,310,300,670);jacket.addColorStop(0,'#285363');jacket.addColorStop(.55,'#183744');jacket.addColorStop(1,'#112833');
+  c.fillStyle='#162b37';c.beginPath();c.moveTo(110,337);c.quadraticCurveTo(78,350,66,438);c.lineTo(47,537);c.quadraticCurveTo(44,556,62,561);c.lineTo(97,474);c.lineTo(102,595);c.quadraticCurveTo(180,640,278,595);c.lineTo(286,474);c.lineTo(322,561);c.quadraticCurveTo(340,556,336,537);c.lineTo(317,438);c.quadraticCurveTo(304,350,270,337);c.closePath();c.fill();
+  c.fillStyle=jacket;c.beginPath();c.moveTo(108,335);c.quadraticCurveTo(82,354,83,422);c.lineTo(94,530);c.quadraticCurveTo(181,568,290,530);c.lineTo(300,422);c.quadraticCurveTo(301,354,270,335);c.lineTo(230,318);c.lineTo(190,371);c.lineTo(151,318);c.closePath();c.fill();
+  c.fillStyle='#b88c70';c.beginPath();c.moveTo(150,301);c.lineTo(230,301);c.lineTo(232,345);c.quadraticCurveTo(192,378,148,345);c.closePath();c.fill();
+  c.fillStyle='#d0a98c';c.beginPath();c.ellipse(190,188,84,107,0,0,Math.PI*2);c.fill();
+  const hair=c.createLinearGradient(100,96,250,230);hair.addColorStop(0,'#252a36');hair.addColorStop(1,'#3c3540');c.fillStyle=hair;c.beginPath();c.moveTo(107,199);c.quadraticCurveTo(77,101,144,79);c.quadraticCurveTo(229,48,271,128);c.quadraticCurveTo(284,172,258,211);c.lineTo(244,159);c.quadraticCurveTo(203,179,158,158);c.quadraticCurveTo(137,185,107,199);c.fill();
+  c.fillStyle='#352a2a';c.beginPath();c.arc(160,194,5,0,Math.PI*2);c.arc(221,194,5,0,Math.PI*2);c.fill();c.fillStyle='#fff';c.beginPath();c.arc(162,192,1.6,0,Math.PI*2);c.arc(223,192,1.6,0,Math.PI*2);c.fill();
+  c.strokeStyle='#875d52';c.lineWidth=4;c.beginPath();c.moveTo(176,241);c.quadraticCurveTo(192,251,207,240);c.stroke();
+  c.fillStyle='#d4c29d';c.beginPath();c.moveTo(151,335);c.lineTo(190,382);c.lineTo(228,335);c.lineTo(212,324);c.lineTo(190,347);c.lineTo(168,324);c.closePath();c.fill();
+  // Braços apoiados nos lados da mesa, pernas dobradas e sentadas na cadeira.
+  c.fillStyle='#b88c70';c.beginPath();c.moveTo(89,429);c.lineTo(62,526);c.quadraticCurveTo(58,544,76,550);c.lineTo(117,477);c.closePath();c.fill();c.beginPath();c.moveTo(291,429);c.lineTo(320,526);c.quadraticCurveTo(324,544,306,550);c.lineTo(263,477);c.closePath();c.fill();
+  const texture=new THREE.CanvasTexture(canvas);this.opponentTexture=texture;texture.colorSpace=THREE.SRGBColorSpace;
+  const avatar=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthWrite:false,depthTest:true}));avatar.position.set(0,7.5,-6.2);avatar.scale.set(7.5,15,1);this.board.add(avatar);
  }
  async preview(cards){this.cards=new Map(cards.map(c=>[c.id,c]));this.clearUnits();for(const[i,card]of[cards[0],cards[1]].entries()){if(!card)continue;const root=await this.monsters.create(card);root.position.set(i===0?-1.3:1.2,.08,i===0?.5:-.75);root.rotation.y=i===0?.3:-.6;root.scale.setScalar(1.1);this.board.add(root);this.units.set('preview'+i,{root,preview:true});}}
  async sync(state,cards){
