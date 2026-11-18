@@ -50,7 +50,7 @@ final class MultiplayerService
         if(!$q->rowCount()){try{$pdo->prepare('INSERT INTO online_presence(user_id,seen_at) VALUES (?,?)')->execute([$user,time()]);}catch(\PDOException $e){$q->execute([time(),$user]);}}
         $q=$pdo->prepare('SELECT users.id,users.name,users.is_guest FROM online_presence JOIN users ON users.id=online_presence.user_id WHERE online_presence.seen_at>=? AND users.id<>? ORDER BY users.name LIMIT 100');$q->execute([time()-45,$user]);
         $players=$q->fetchAll();foreach($players as &$player){if($player['is_guest'])$player['name'].=' #'.$player['id'];unset($player['is_guest']);}unset($player);
-        $q=$pdo->prepare("SELECT i.id,i.room_id,u.name,u.id AS sender_id,u.is_guest FROM multiplayer_invites i JOIN users u ON u.id=i.sender_id JOIN multiplayer_rooms r ON r.id=i.room_id WHERE i.recipient_id=? AND i.status='pending' AND r.status='waiting' AND i.created_at>=? ORDER BY i.id DESC LIMIT 20");$q->execute([$user,time()-3600]);$invites=$q->fetchAll();foreach($invites as &$invitation){if($invitation['is_guest'])$invitation['name'].=' #'.$invitation['sender_id'];unset($invitation['is_guest'],$invitation['sender_id']);}unset($invitation);
+        $q=$pdo->prepare("SELECT i.id,i.room_id,u.name,u.id AS sender_id,u.is_guest FROM multiplayer_invites i JOIN users u ON u.id=i.sender_id JOIN multiplayer_rooms r ON r.id=i.room_id WHERE i.recipient_id=? AND i.status='pending' AND r.status='waiting' AND i.created_at>=? ORDER BY i.id DESC LIMIT 20");$q->execute([$user,time()-86400]);$invites=$q->fetchAll();foreach($invites as &$invitation){if($invitation['is_guest'])$invitation['name'].=' #'.$invitation['sender_id'];unset($invitation['is_guest'],$invitation['sender_id']);}unset($invitation);
         return ['players'=>$players,'invites'=>$invites];
     }
     public function create(int $user,array $data): array
@@ -67,9 +67,9 @@ final class MultiplayerService
         $deck=Input::integer($data,'deck_id',1,PHP_INT_MAX);$guestDeck=$this->deck($user,$deck);
         return Database::transaction(function($pdo)use($id,$user,$data,$invite,$guestDeck){
             $r=$this->room($id,true);if((int)$r['host_id']===$user || (int)($r['guest_id']??0)===$user)return $this->view($r,$user);
-            if($r['status']!=='waiting'||time()-(int)$r['created_at']>3600)throw new ApiException('Esta sala está cheia ou expirou.',409);
+            if($r['status']!=='waiting'||time()-(int)$r['created_at']>86400)throw new ApiException('Esta sala está cheia ou expirou.',409);
             if($r['invited_id']!==null&&(int)$r['invited_id']!==$user)throw new ApiException('Esta sala é reservada ao jogador convidado.',403);
-            if($invite){$q=$pdo->prepare("SELECT id FROM multiplayer_invites WHERE room_id=? AND recipient_id=? AND status='pending' AND created_at>=?");$q->execute([$id,$user,time()-3600]);if(!$q->fetch())throw new ApiException('Convite indisponível.',403);}
+            if($invite){$q=$pdo->prepare("SELECT id FROM multiplayer_invites WHERE room_id=? AND recipient_id=? AND status='pending' AND created_at>=?");$q->execute([$id,$user,time()-86400]);if(!$q->fetch())throw new ApiException('Convite indisponível.',403);}
             else{ $token=$data['token']??'';if(!is_string($token)||!hash_equals($r['token_hash'],hash('sha256',$token)))throw new ApiException('Link de convite inválido.',403); }
             $cards=(new CardRepository())->all();$snapshot=array_column($cards,null,'id');$state=(new BattleEngine($snapshot))->start($this->deck((int)$r['host_id'],(int)$r['host_deck']),$guestDeck);$state['card_snapshot']=$snapshot;
             $pdo->prepare("UPDATE multiplayer_rooms SET guest_id=?,status='active',state_json=?,version=version+1,updated_at=? WHERE id=?")->execute([$user,json_encode($state,JSON_THROW_ON_ERROR),time(),$id]);

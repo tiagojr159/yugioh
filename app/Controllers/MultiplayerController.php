@@ -12,7 +12,10 @@ final class MultiplayerController
     public function voiceAction(Request $r,int $id): array
     {
         $service=new MultiplayerService();$user=$this->user();
-        return ($r->data['action']??'')==='signal'?$service->voiceSignal($id,$user,$r->data):$service->voiceTransition($id,$user,$r->data);
+        $action=$r->data['action']??'';
+        if($action==='signal')return $service->voiceSignal($id,$user,$r->data);
+        if($action==='start')return $service->voiceStart($id,$user);
+        return $service->voiceTransition($id,$user,$r->data);
     }
     public function create(Request $r): array { return (new MultiplayerService())->create($this->user(),$r->data); }
     public function show(Request $r,int $id): array { return (new MultiplayerService())->get($id,$this->user()); }
