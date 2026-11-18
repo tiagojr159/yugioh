@@ -27,9 +27,13 @@ export class IOSSurfaceAdapter{
   // element into the arena. Reassert playback after attaching it to its final
   // parent, then wait for decoded frames before hit-testing.
   await this.video.play?.();
-  if(this.video.readyState<2)await new Promise(resolve=>this.video.addEventListener('loadeddata',resolve,{once:true}));
+  if(this.video.readyState<2)await new Promise((resolve,reject)=>{
+   const video=this.video,done=()=>{clearTimeout(timer);video.removeEventListener('loadeddata',done);resolve();};
+   const timer=setTimeout(()=>{video.removeEventListener('loadeddata',done);reject(Error('A câmera não entregou imagens. Toque em ativar câmera para tentar novamente.'));},8000);
+   video.addEventListener('loadeddata',done,{once:true});
+  });
   if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
-  this.select=event=>{if(event.target!==a.renderer.domElement||!this.reticle.visible||this.placed)return;event.stopPropagation();a.board.position.copy(this.reticle.position);a.board.quaternion.identity();a.board.scale.setScalar(.075);a.board.visible=true;this.placed=true;this.reticle.visible=false;document.getElementById('ar-begin-panel').hidden=!!a.battleState;this.message('Tabuleiro posicionado. Use os controles para jogar.');};
+  this.select=event=>{if(event.target!==a.renderer.domElement||!this.reticle.visible||this.placed)return;event.stopPropagation();a.board.position.copy(this.reticle.position);a.board.quaternion.identity();a.board.scale.setScalar(.075);a.board.visible=true;this.placed=true;this.reticle.visible=false;document.getElementById('ar-begin-panel').hidden=!!a.battleState||!!a.roomWaiting;this.message('Tabuleiro posicionado. Use os controles para jogar.');};
   this.onVisible=()=>{if(document.visibilityState==='visible'&&!this.stopped){this.video?.play().catch(()=>{});setTimeout(()=>this.update(),180);}};
   document.addEventListener?.('visibilitychange',this.onVisible);window.addEventListener?.('pageshow',this.onVisible);
   a.container.addEventListener('pointerup',this.select);this.resize();

@@ -16,7 +16,8 @@ final class Application
             if (!in_array($request->method, ['GET', 'HEAD', 'OPTIONS'], true)) {
                 $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
                 if (!hash_equals($_SESSION['csrf'], $token)) { throw new ApiException('Sua sessão expirou. Recarregue a página.', 419); }
-                \App\Middleware\RateLimit::check($request->path, (str_starts_with($request->path, '/api/auth/') || $request->path === '/install') ? 15 : 90);
+                $voiceSignal=(bool)preg_match('#^/api/multiplayer/rooms/\d+/voice$#',$request->path);
+                \App\Middleware\RateLimit::check($request->path, (str_starts_with($request->path, '/api/auth/') || $request->path === '/install') ? 15 : ($voiceSignal ? 300 : 90));
             }
             $router = new Router();
             require BASE_PATH . '/routes/api.php';
@@ -50,9 +51,10 @@ final class Application
         if (session_status() === PHP_SESSION_ACTIVE) { return; }
         ini_set('session.use_strict_mode', '1');
         ini_set('session.use_only_cookies', '1');
+        ini_set('session.gc_maxlifetime', '2592000');
         session_name('arcana_session');
         session_save_path(BASE_PATH . '/storage/sessions');
-        session_set_cookie_params(['httponly' => true, 'secure' => config('app')['secure'], 'samesite' => 'Lax', 'path' => '/']);
+        session_set_cookie_params(['lifetime' => 2592000, 'httponly' => true, 'secure' => config('app')['secure'], 'samesite' => 'Lax', 'path' => '/']);
         session_start();
         $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
     }

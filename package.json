@@ -10,6 +10,7 @@
     "start": "node scripts/serve.mjs",
     "test:api": "node scripts/smoke-api.mjs",
     "test:ar": "node --test tests/Frontend/ar.test.mjs",
+    "test:multiplayer": "node --test tests/Frontend/multiplayer.test.mjs && node scripts/test-multiplayer.mjs",
     "test:install": "node scripts/test-install.mjs"
   },
   "dependencies": {

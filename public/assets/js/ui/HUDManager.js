@@ -1,10 +1,11 @@
+import {summonReason} from '../game/Combat.js';
 export const $=s=>document.querySelector(s);
 export const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const number=n=>Number(n).toLocaleString('pt-BR');
 export function toast(message,error=false){const el=document.createElement('div');el.className='toast'+(error?' error':'');el.textContent=message;$('#toasts').append(el);setTimeout(()=>el.remove(),6000);}
 export function modal(title,content){$('#modal-title').textContent=title;$('#modal-content').innerHTML=content;if(!$('#modal').open)$('#modal').showModal();}
 export class HUDManager{
- update(s,card,user,busy=false){
+ update(s,card,user,busy=false,cards=[]){
   $('#player-name').firstChild.textContent=(user?.name||'Você')+' ';
   $('#arena-caption').hidden=!!s;$('#field-labels').hidden=!s;
   if(!s){$('#summon-button').disabled=true;$('#attack-button').disabled=true;$('#end-turn-button').disabled=true;return;}
@@ -15,8 +16,14 @@ export class HUDManager{
   $('#energy-crystals').innerHTML=Array.from({length:s.player.max_energy},(_,i)=>'<i class="'+(i>=s.player.energy?'spent':'')+'"></i>').join('');
   $('#deck-count').textContent=s.player.deck_count;
   $('#hand-count').textContent=s.player.hand.length+' cartas';
-  const active=s.status==='active'&&s.active_side==='player'&&!busy;$('#summon-button').disabled=!active||!card||!s.player.hand.includes(card.id)||s.player.summoned||s.player.field.length>=3||s.player.energy<card.cost;$('#attack-button').disabled=!active||!s.player.field.some(m=>!m.attacked);$('#end-turn-button').disabled=!active;
-  $('#arena-tip').textContent=s.status==='finished'?'Duelo encerrado':s.active_side!=='player'?'Aguarde o turno do adversário.':s.player.summoned?'Selecione uma criatura e ataque, ou encerre o turno.':'Escolha uma carta da mão e toque em Invocar.';
+  const active=s.status==='active'&&s.active_side==='player'&&!busy;
+  const reason=summonReason(s,cards,card,busy),summon=$('#summon-button');
+  summon.disabled=!!reason;summon.title=reason||'Invocar uma carta da sua mão';
+  $('#attack-button').disabled=!active||!s.player.field.some(m=>!m.attacked);$('#end-turn-button').disabled=!active;
+  $('#end-turn-button').classList.toggle('next-step',active&&s.player.summoned&&!s.player.field.some(m=>!m.attacked));
+  $('#arena-tip').textContent=reason||(s.player.summoned?'Toque em Atacar ou selecione um alvo no tabuleiro.':'Sua vez: escolha uma carta e toque em Invocar.');
+  const hint=$('#hand-hint');if(hint)hint.textContent=s.active_side==='player'?'Sua vez · 1 invocação e 1 ataque por criatura':(s.opponent_name||'Adversário')+' está jogando';
+
  }
  hp(side,value){$('#'+side+'-hp').innerHTML=number(value)+' <small>PV</small>';$('#'+side+'-life').style.width=(value/4000*100)+'%';}
  float(side,value,heal=false){const el=document.createElement('span');el.className='damage-float '+side+(heal?' heal':'');el.textContent=(heal?'+':'−')+number(value);$('#floating-effects').append(el);setTimeout(()=>el.remove(),1300);}

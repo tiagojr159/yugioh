@@ -1,166 +1,141 @@
-import {modal,toast,escape} from '../ui/HUDManager.js';
+import {toast} from '../ui/HUDManager.js';
 import {CallSocket} from './CallSocket.js';
 
+// Local opt-in channel: the phone controls this device, never answers by hanging
+// up a remote invitation. Only one server-assigned caller creates SDP offers.
 export class VoiceCall {
-  constructor(api) {
-    this.api=api; this.room=null; this.socket=null; this.pc=null; this.local=null;
-    this.remote=document.createElement('audio'); this.remote.autoplay=false; this.remote.playsInline=true; this.remote.setAttribute('aria-hidden','true'); Object.assign(this.remote.style,{position:'fixed',width:'1px',height:'1px',opacity:'0',pointerEvents:'none',left:'-10px',bottom:'0'}); document.body.append(this.remote);
-    this.pendingCandidates=[]; this.pendingOffer=null; this.callId=0; this.callerRole=''; this.calling=false; this.inCall=false; this.incomingId=0; this.cursor=0; this.polling=false; this.pollTimer=null; this.lastError='';
-    this.callButtons=[...document.querySelectorAll('#voice-call-button,#ar-voice-call-button,#room-voice-call-button')]; this.muteButtons=[...document.querySelectorAll('#voice-mute-button,#ar-voice-mute-button,#room-voice-mute-button')];
-    this.callButtons.forEach(button=>button.addEventListener('click',()=>this.inCall||this.calling?this.hangup():this.startCall()));
-    this.muteButtons.forEach(button=>button.addEventListener('click',()=>this.toggleMute()));
+ constructor(api){
+  this.api=api;this.room=null;this.enabled=false;this.starting=false;this.epoch=0;this.cursor=0;this.callId=0;this.pendingCandidates=[];
+  this.remote=document.createElement('audio');this.remote.autoplay=true;this.remote.playsInline=true;this.remote.setAttribute('playsinline','');
+  Object.assign(this.remote.style,{position:'fixed',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});document.body.append(this.remote);
+  this.callButtons=[...document.querySelectorAll('#voice-call-button,#ar-voice-call-button,#room-voice-call-button')];
+  this.muteButtons=[...document.querySelectorAll('#voice-mute-button,#ar-voice-mute-button,#room-voice-mute-button')];
+  this.callButtons.forEach(b=>b.addEventListener('click',()=>this.enabled?this.hangup():this.startCall()));
+  this.muteButtons.forEach(b=>b.addEventListener('click',()=>this.toggleMute()));
+  this.resume=()=>{if(this.enabled){this.audioContext?.resume().catch(()=>{});if(this.remote.srcObject&&!this.remote.muted)this.remote.play().catch(()=>{});this.poll();}};
+  document.addEventListener('visibilitychange',this.resume);document.addEventListener('pointerdown',this.resume,{passive:true});this.render();
+ }
+ configure(s){
+  if(!s?.multiplayer||!['waiting','active'].includes(s.status)){this.disconnect();return;}
+  const room={id:Number(s.id),role:s.my_role,status:s.status,name:s.opponent_name||'Adversario'};
+  if(this.room?.id===room.id){const wasWaiting=this.room.status==='waiting';this.room=room;if(wasWaiting&&room.status==='active')this.connectRoom(room);return;}
+  this.disconnect();this.room=room;if(room.status==='active')this.connectRoom(room);this.render();
+ }
+ connectRoom(room){
+  this.iceServers=[{urls:'stun:stun.l.google.com:19302'}];
+  this.configReady=this.api.request(`multiplayer/rooms/${room.id}/voice-token`).then(config=>{if(this.room?.id===room.id)this.iceServers=config.ice_servers||this.iceServers;}).catch(()=>{});
+  this.socket=new CallSocket(this.api,room.id,{onEvent:()=>this.poll()});
+  this.timer=setInterval(()=>this.poll(),1700);this.poll();this.render();
+ }
+ async startCall(){
+  if(!this.room||this.starting)return;
+  const epoch=++this.epoch;this.enabled=true;this.starting=true;this.failed=false;this.status='Ativando microfone e audio...';this.render();
+  // Both permissions/output activation are requested inside the button gesture.
+  const output=this.prepareAudioOutput();
+  try{
+   if(!navigator.mediaDevices?.getUserMedia)throw Error('Microfone indisponivel. Abra o jogo por HTTPS.');
+   const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+   if(epoch!==this.epoch){stream.getTracks().forEach(t=>t.stop());return;}
+   this.local=stream;await output;
+   if(this.room.status==='waiting'){this.status='Microfone e escuta ligados. Aguardando jogador entrar.';return;}
+   await this.configReady;
+   if(epoch!==this.epoch)return;
+   const call=await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'start'}});
+   if(epoch!==this.epoch)return;
+   await this.selectCall(call);this.socket?.send({type:'wake'});
+  }catch(error){if(epoch===this.epoch){await this.hangup();toast(error.message||'Nao foi possivel ativar a voz.',true);}}
+  finally{if(epoch===this.epoch){this.starting=false;this.render();this.poll();}}
+ }
+ prepareAudioOutput(){
+  try{const Context=window.AudioContext||window.webkitAudioContext;if(!Context)return Promise.resolve();this.audioContext??=new Context();return this.audioContext.resume().catch(()=>{});}catch{return Promise.resolve();}
+ }
+ async selectCall(call){
+  if(!this.enabled||!this.local||!['ringing','accepted'].includes(call?.status))return;
+  if(this.callId!==Number(call.id)){this.clearPeer();this.callId=Number(call.id);this.cursor=0;}
+  this.callerRole=call.caller_role||call.role;this.status=call.status==='accepted'?'Conectando audio...':'Voz ligada. Aguardando o outro jogador ativar o telefone.';
+  if(this.room.role!==this.callerRole&&call.status==='ringing'){
+   // This device already opted in. Join an invitation without another modal.
+   call=await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'start'}});
   }
-  async configure(state) {
-    if(!state?.multiplayer||state.status!=='active'||!state.id||!['host','guest'].includes(state.my_role)) { if(this.room)this.hangup(); this.disconnect(); return; }
-    const next={id:Number(state.id),key:state.voice_key,role:state.my_role,name:state.opponent_name||'Outro jogador'};
-    if(this.room?.id===next.id&&this.room?.key===next.key) { this.room=next; return; }
-    this.disconnect(); this.room=next; this.cursor=0; this.iceServers=[{urls:'stun:stun.l.google.com:19302'}];
-    this.socket=new CallSocket(this.api,next.id,{onEvent:e=>{if(e.type==='wake'||e.type==='peer-ready')this.poll();},onStatus:connected=>this.callButtons.forEach(button=>button.classList.toggle('socket-online',connected)),onConfig:data=>{if(Array.isArray(data.ice_servers))this.iceServers=data.ice_servers;}});
-    this.pollTimer=setInterval(()=>this.poll(),1300); this.poll(); this.render();
+  if(!this.enabled)return;
+  if(this.room.role===this.callerRole&&!this.offerSent){
+   this.offerSent=true;const pc=this.makePeer(),offer=await pc.createOffer();await pc.setLocalDescription(offer);await this.signal('offer',pc.localDescription.toJSON());
   }
-  async startCall() {
-    if(!this.room){toast('Entre em uma partida multiplayer ativa para chamar.',true);return;}
-    if(this.calling||this.inCall)return;
-    try {
-      // Resume Web Audio synchronously in the call-button gesture. Safari may
-      // reject a later remote-audio play() after the signaling round trips.
-      const audioReady=this.prepareAudioOutput();
-      await this.ensureMicrophone();
-      await audioReady;
-      const call=await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'start'}});
-      this.callId=call.id; this.callerRole=call.role; this.calling=true; this.inCall=false; this.render(); this.makePeer();
-      const offer=await this.pc.createOffer(); await this.pc.setLocalDescription(offer); await this.signal('offer',this.pc.localDescription.toJSON());
-      this.socket?.send({type:'wake'}); this.poll(); toast('Chamando '+this.room.name+'...');
-      this.callTimeout=setTimeout(()=>{if(this.callId&&this.pc?.connectionState!=='connected')this.hangup('A chamada nao foi atendida ou nao conectou.');},36000);
-    } catch(error) {
-      const callId=this.callId; this.releaseCall();
-      if(callId)this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'end',call_id:callId}}).catch(()=>{});
-      toast(error.message||'Nao foi possivel iniciar a chamada.',true);
-    }
+  this.render();
+ }
+ makePeer(){
+  if(this.pc)return this.pc;
+  if(!window.RTCPeerConnection)throw Error('Este navegador nao suporta chamada de voz.');
+  const pc=this.pc=new RTCPeerConnection({iceServers:this.iceServers}),callId=this.callId;
+  this.local.getTracks().forEach(t=>pc.addTrack(t,this.local));
+  pc.onicecandidate=e=>{if(e.candidate&&this.pc===pc)this.signal('ice',e.candidate.toJSON(),callId).catch(()=>{});};
+  pc.ontrack=e=>{
+   if(this.pc!==pc)return;
+   this.remoteStream=e.streams?.[0]||new MediaStream([e.track]);this.remote.srcObject=this.remoteStream;
+   // Native media playback handles the phone's communication audio route. Use
+   // Web Audio only if the browser rejects media autoplay (avoid double sound).
+   this.remote.muted=false;
+   this.remote.play().catch(()=>{
+    if(!this.enabled||this.pc!==pc||!this.audioContext)return;
+    this.remote.muted=true;this.remoteSource?.disconnect();this.remoteSource=this.audioContext.createMediaStreamSource(this.remoteStream);this.remoteSource.connect(this.audioContext.destination);this.audioContext.resume().catch(()=>{});
+   });
+  };
+  pc.onconnectionstatechange=()=>{
+   if(this.pc!==pc)return;
+   this.inCall=pc.connectionState==='connected';
+   if(this.inCall)this.status='Voz conectada. Voces podem falar e ouvir.';
+   else if(['connecting','disconnected'].includes(pc.connectionState))this.status='Conectando audio...';
+   else if(pc.connectionState==='failed'){this.failed=true;this.status='Audio nao conectou nesta rede. Desative e reative a voz.';toast('Nao foi possivel conectar o audio entre as redes. Confira o servidor TURN da hospedagem.',true);}
+   this.render();
+  };
+  return pc;
+ }
+ async poll(){
+  if(!this.room||this.room.status==='waiting'||this.polling||this.starting)return;this.polling=true;const roomId=this.room.id,epoch=this.epoch;
+  try{
+   const data=await this.api.request(`multiplayer/rooms/${roomId}/voice?after=${this.cursor}`);
+   if(this.room?.id!==roomId||epoch!==this.epoch)return;
+   const call=data.call;
+   if(!this.enabled){this.status=call?.status==='ringing'||call?.status==='accepted'?'O outro jogador ativou a voz. Toque no telefone para conversar.':'Toque no telefone para ativar microfone e escuta.';return;}
+   if(this.failed)return;
+   if(!call||!['ringing','accepted'].includes(call.status)){
+    this.clearPeer();this.callId=0;this.cursor=0;
+    await this.configReady;const next=await this.api.request(`multiplayer/rooms/${roomId}/voice`,{method:'POST',data:{action:'start'}});
+    if(epoch===this.epoch)await this.selectCall(next);return;
+   }
+   await this.selectCall(call);
+   for(const item of data.signals||[]){if(epoch!==this.epoch)return;await this.message(item);this.cursor=Math.max(this.cursor,Number(item.id));}
+  }catch(error){this.status=error.message||'Reconectando canal de voz...';}
+  finally{this.polling=false;this.render();}
+ }
+ async message(item){
+  if(!this.enabled||Number(item.call_id)!==this.callId)return;
+  if(item.signal_type==='ice'){
+   if(this.pc?.remoteDescription)await this.pc.addIceCandidate(item.payload);else this.pendingCandidates.push(item.payload);return;
   }
-  async ensureMicrophone() {
-    if(this.local)return;
-    if(!navigator.mediaDevices?.getUserMedia)throw Error('Este navegador nao oferece microfone para chamadas.');
-    this.local=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
-  }
-  prepareAudioOutput() {
-    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
-    if(!AudioContextClass)return Promise.resolve(false);
-    try {
-      if(!this.audioContext||this.audioContext.state==='closed')this.audioContext=new AudioContextClass();
-      return this.audioContext.state==='suspended'?this.audioContext.resume().catch(error=>{console.warn('Saída de áudio:',error);return false;}):Promise.resolve(true);
-    } catch(error) { console.warn('Saída de áudio:',error); return Promise.resolve(false); }
-  }
-  makePeer() {
-    if(this.pc)return this.pc;
-    if(!window.RTCPeerConnection)throw Error('Este navegador nao oferece suporte a chamadas de voz.');
-    const pc=this.pc=new RTCPeerConnection({iceServers:this.iceServers||[{urls:'stun:stun.l.google.com:19302'}]});
-    for(const track of this.local.getTracks())pc.addTrack(track,this.local);
-    pc.onicecandidate=e=>{if(e.candidate)this.signal('ice',e.candidate.toJSON()).catch(error=>toast(error.message,true));};
-    pc.ontrack=e=>{
-      const stream=e.streams?.[0]||(e.track&&window.MediaStream?new MediaStream([e.track]):null);
-      if(!stream)return;
-      this.remote.srcObject=stream;
-      if(this.audioContext&&this.audioContext.state!=='closed'){
-        try {
-          this.remoteSource?.disconnect();
-          this.remoteSource=this.audioContext.createMediaStreamSource(stream);
-          this.remoteGain=this.audioContext.createGain();this.remoteGain.gain.value=1;
-          this.remoteSource.connect(this.remoteGain).connect(this.audioContext.destination);
-          this.audioContext.resume().catch(()=>{});
-        } catch(error) { console.warn('Áudio remoto:',error); this.remote.play().catch(()=>toast('Toque em Ativar áudio para ouvir a chamada.',true)); }
-      } else this.remote.play().catch(()=>toast('Toque em Ativar áudio para ouvir a chamada.',true));
-    };
-    pc.onconnectionstatechange=()=>{
-      if(pc.connectionState==='connected'){clearTimeout(this.callTimeout);this.calling=false;this.inCall=true;this.render();toast('Chamada de voz conectada.');}
-      else if(pc.connectionState==='failed'){this.calling=false;this.inCall=false;this.render();toast('A chamada nao conectou. A rede pode exigir um servidor TURN para liberar o audio.',true);this.hangup();}
-    };
-    return pc;
-  }
-  async poll() {
-    if(!this.room||this.polling)return; this.polling=true;
-    try {
-      const data=await this.api.request(`multiplayer/rooms/${this.room.id}/voice?after=${this.cursor}`); this.lastError='';
-      if(data.call)await this.callState(data.call);
-      for(const signal of data.signals||[]){await this.message(signal);this.cursor=Math.max(this.cursor,Number(signal.id)||0);}
-    } catch(error) {
-      if(this.room&&this.lastError!==error.message){this.lastError=error.message;toast(error.message||'Nao foi possivel sincronizar a chamada.',true);}
-    } finally {this.polling=false;}
-  }
-  async callState(call) {
-    if(this.callId&&Number(call.id)===this.callId) {
-      if(call.status==='accepted'){this.calling=true;this.render();}
-      else if(['declined','missed','ended'].includes(call.status)){
-        const message=call.status==='declined'?'O outro jogador recusou a chamada.':call.status==='missed'?'O outro jogador nao atendeu.':'A chamada foi encerrada.';
-        this.releaseCall();toast(message);
-      }
-      return;
-    }
-    if(this.callId||call.status!=='ringing'||this.room.role===call.caller_role||this.incomingId===Number(call.id))return;
-    this.callId=Number(call.id);this.callerRole=call.caller_role;this.incomingId=this.callId;this.incoming();
-  }
-  incoming() {
-    modal('Chamada de voz','<p class="modal-copy">'+escape(this.room?.name||'Outro jogador')+' esta chamando. Atenda para liberar o microfone.</p><button class="button button-gold" id="voice-accept">Atender</button> <button class="button button-end" id="voice-reject">Recusar</button>');
-    document.querySelector('#voice-accept').onclick=()=>this.accept();
-    document.querySelector('#voice-reject').onclick=()=>this.decline();
-  }
-  async accept() {
-    try {
-      const audioReady=this.prepareAudioOutput();
-      await this.ensureMicrophone();
-      await audioReady;
-      await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'accept',call_id:this.callId}});
-      document.querySelector('#modal').close();this.inCall=false;this.calling=true;this.makePeer();this.render();
-      if(this.pendingOffer){const offer=this.pendingOffer;this.pendingOffer=null;await this.setOffer(offer);}
-      await this.flushCandidates();this.socket?.send({type:'wake'});this.poll();
-    } catch(error) {toast(error.message||'Nao foi possivel atender a chamada.',true);await this.hangup();}
-  }
-  async decline() {
-    const callId=this.callId;if($('#modal')?.open)$('#modal').close();this.releaseCall();
-    if(callId)try{await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'decline',call_id:callId}});this.socket?.send({type:'wake'});}catch(error){toast(error.message,true);}
-  }
-  async message(signal) {
-    if(Number(signal.call_id)!==this.callId)return;
-    try {
-      if(signal.signal_type==='ice'){if(this.pc?.remoteDescription)await this.pc.addIceCandidate(signal.payload);else if(this.pendingCandidates.length<256)this.pendingCandidates.push(signal.payload);return;}
-      if(signal.signal_type==='offer'){if(!this.local){this.pendingOffer=signal.payload;return;}await this.setOffer(signal.payload);return;}
-      if(signal.signal_type==='answer'&&this.pc){await this.pc.setRemoteDescription(signal.payload);await this.flushCandidates();this.calling=true;this.render();}
-    } catch(error) {toast(error.message||'Erro ao negociar o audio da chamada.',true);this.hangup();}
-  }
-  async setOffer(description) {
-    const pc=this.makePeer();await pc.setRemoteDescription(description);await this.flushCandidates();
-    const answer=await pc.createAnswer();await pc.setLocalDescription(answer);await this.signal('answer',pc.localDescription.toJSON());
-  }
-  async flushCandidates(){if(!this.pc?.remoteDescription)return;for(const candidate of this.pendingCandidates.splice(0))await this.pc.addIceCandidate(candidate);}
-  async signal(type,payload) {
-    if(!this.callId)return;
-    await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'signal',call_id:this.callId,type,payload}});
-    this.socket?.send({type:'wake'});
-  }
-  toggleMute() {
-    if(!this.local)return;const muted=this.local.getAudioTracks().every(track=>!track.enabled);
-    for(const track of this.local.getAudioTracks())track.enabled=muted;
-    this.muteButtons.forEach(button=>button.classList.toggle('is-muted',!muted));this.render();toast(muted?'Microfone ligado.':'Microfone silenciado.');
-  }
-  async hangup(message='Chamada encerrada.') {
-    const callId=this.callId;this.releaseCall();
-    if(callId&&this.room)try{await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'end',call_id:callId}});this.socket?.send({type:'wake'});}
-    catch(error){toast(error.message||message,true);}
-    else if(message!=='Chamada encerrada.')toast(message);
-  }
-  releaseCall() {
-    clearTimeout(this.callTimeout);this.pc?.close();this.pc=null;
-    this.remoteSource?.disconnect();this.remoteSource=null;this.remoteGain?.disconnect();this.remoteGain=null;
-    if(this.audioContext&&this.audioContext.state!=='closed')this.audioContext.close().catch(()=>{});this.audioContext=null;
-    for(const track of this.local?.getTracks()||[])track.stop();this.local=null;this.remote.srcObject=null;
-    this.pendingCandidates=[];this.pendingOffer=null;this.callId=0;this.callerRole='';this.calling=false;this.inCall=false;this.incomingId=0;this.render();
-  }
-  render() {
-    const ending=this.inCall||this.calling;this.callButtons.forEach(button=>{button.hidden=!this.room;button.disabled=false;button.setAttribute('aria-label',ending?'Encerrar chamada':'Iniciar chamada de voz');button.title=ending?'Encerrar chamada':'Chamar por voz';button.classList.toggle('is-active',ending);});
-    const callStatus=document.querySelector('#duel-room-call-status');if(callStatus&&this.room)callStatus.textContent=this.inCall?'Chamada conectada. Use o botão para encerrar.':this.calling?'Conectando à chamada…':'Jogador conectado. Você pode iniciar a chamada de voz.';
-    const muted=this.local?.getAudioTracks().every(track=>!track.enabled)??false;this.muteButtons.forEach(button=>{button.hidden=!(this.inCall||this.calling)||!this.local;button.setAttribute('aria-label',muted?'Ligar microfone':'Silenciar microfone');button.title=button.getAttribute('aria-label');button.classList.toggle('is-muted',muted);});
-  }
-  disconnect(){clearInterval(this.pollTimer);this.pollTimer=null;this.socket?.close();this.socket=null;this.releaseCall();this.room=null;if(this.callButton)this.callButton.hidden=true;}
-  dispose(){if(this.callId)this.hangup();this.disconnect();this.remote.remove();}
+  if(item.signal_type==='offer'&&this.room.role!==this.callerRole){
+   const pc=this.makePeer();await pc.setRemoteDescription(item.payload);await this.flushCandidates();const answer=await pc.createAnswer();await pc.setLocalDescription(answer);await this.signal('answer',pc.localDescription.toJSON());
+  }else if(item.signal_type==='answer'&&this.pc?.signalingState==='have-local-offer'){await this.pc.setRemoteDescription(item.payload);await this.flushCandidates();}
+ }
+ async flushCandidates(){for(const c of this.pendingCandidates.splice(0))await this.pc.addIceCandidate(c);}
+ async signal(type,payload,callId=this.callId){if(!this.enabled||!callId||!this.room)return;await this.api.request(`multiplayer/rooms/${this.room.id}/voice`,{method:'POST',data:{action:'signal',call_id:callId,type,payload}});this.socket?.send({type:'wake'});}
+ toggleMute(){if(!this.local)return;const muted=this.local.getAudioTracks().every(t=>!t.enabled);this.local.getAudioTracks().forEach(t=>t.enabled=muted);this.render();}
+ async hangup(){
+  const id=this.callId,room=this.room;this.enabled=false;this.starting=false;++this.epoch;this.callId=0;this.clearPeer();
+  this.local?.getTracks().forEach(t=>t.stop());this.local=null;this.audioContext?.close().catch(()=>{});this.audioContext=null;this.status='Voz desativada neste celular.';this.render();
+  if(id&&room)try{await this.api.request(`multiplayer/rooms/${room.id}/voice`,{method:'POST',data:{action:'end',call_id:id}});this.socket?.send({type:'wake'});}catch{}
+ }
+ clearPeer(){
+  if(this.pc){this.pc.onconnectionstatechange=null;this.pc.onicecandidate=null;this.pc.ontrack=null;this.pc.close();}this.pc=null;
+  this.remoteSource?.disconnect();this.remoteSource=null;this.remote.pause();this.remote.srcObject=null;this.remoteStream=null;
+  this.pendingCandidates=[];this.offerSent=false;this.inCall=false;
+ }
+ render(){
+  this.callButtons.forEach(b=>{b.hidden=!this.room;b.disabled=this.starting;b.setAttribute('aria-pressed',String(this.enabled));b.setAttribute('aria-label',this.enabled?'Desativar voz neste celular':'Ativar microfone e escuta');b.title=b.getAttribute('aria-label');b.classList.toggle('is-active',this.enabled);b.classList.toggle('voice-connected',!!this.inCall);});
+  const muted=this.local?.getAudioTracks().every(t=>!t.enabled)||false;
+  this.muteButtons.forEach(b=>{b.hidden=!this.enabled||!this.local;b.setAttribute('aria-label',muted?'Ligar microfone':'Silenciar microfone');b.title=b.getAttribute('aria-label');b.classList.toggle('is-muted',muted);});
+  for(const selector of ['#duel-room-call-status','#ar-voice-status']){const el=document.querySelector(selector);if(el){el.textContent=this.status||'Toque no telefone para ativar a voz.';el.hidden=!this.room;}}
+ }
+ disconnect(){clearInterval(this.timer);this.socket?.close();this.socket=null;this.hangup();this.room=null;this.cursor=0;this.render();}
+ dispose(){this.disconnect();document.removeEventListener('visibilitychange',this.resume);document.removeEventListener('pointerdown',this.resume);this.remote.remove();}
 }
-function $(selector){return document.querySelector(selector);}

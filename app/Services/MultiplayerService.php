@@ -129,12 +129,23 @@ final class MultiplayerService
     public function voiceStart(int $roomId,int $user): array
     {
         $this->requireSchema();[$room,$other]=$this->voiceParticipants($roomId,$user);$role=(int)$room['host_id']===$user?'host':'guest';
-        return Database::transaction(function($pdo)use($roomId,$user,$other,$role){
+        return Database::transaction(function($pdo)use($roomId,$user,$other,$role,$room){
             if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='mysql'){$lock=$pdo->prepare('SELECT id FROM multiplayer_rooms WHERE id=? FOR UPDATE');$lock->execute([$roomId]);$lock->fetch();}
-            $now=time();$pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE room_id=? AND status='ringing' AND created_at<?")->execute([$now,$roomId,$now-35]);
-            $q=$pdo->prepare("SELECT id FROM multiplayer_voice_calls WHERE room_id=? AND status IN ('ringing','accepted') ORDER BY id DESC LIMIT 1");$q->execute([$roomId]);if($q->fetchColumn())throw new ApiException('Já existe uma chamada ativa nesta partida.',409);
+            $now=time();
+            $pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE room_id=? AND status='ringing' AND caller_seen<?")->execute([$now,$roomId,$now-90]);
+            $pdo->prepare("UPDATE multiplayer_voice_calls SET status='ended',updated_at=? WHERE room_id=? AND status='accepted' AND (caller_seen<? OR callee_seen<?)")->execute([$now,$roomId,$now-90,$now-90]);
+            $q=$pdo->prepare("SELECT * FROM multiplayer_voice_calls WHERE room_id=? AND status IN ('ringing','accepted') ORDER BY id DESC LIMIT 1");$q->execute([$roomId]);$existing=$q->fetch();
+            if($existing){
+                // Both phones opt into one channel. A second start joins the
+                // existing call; it must not reject, hang up, or create glare.
+                $caller=(int)$existing['caller_id']===$user;
+                $status=$caller?$existing['status']:'accepted';
+                $column=$caller?'caller_seen':'callee_seen';
+                $pdo->prepare("UPDATE multiplayer_voice_calls SET status=?,updated_at=?,{$column}=? WHERE id=?")->execute([$status,$now,$now,$existing['id']]);
+                return ['id'=>(int)$existing['id'],'room_id'=>$roomId,'caller_id'=>(int)$existing['caller_id'],'callee_id'=>(int)$existing['callee_id'],'role'=>$role,'caller_role'=>(int)$existing['caller_id']===(int)$room['host_id']?'host':'guest','status'=>$status];
+            }
             $q=$pdo->prepare("INSERT INTO multiplayer_voice_calls(room_id,caller_id,callee_id,status,created_at,updated_at,caller_seen,callee_seen) VALUES(?,?,?,'ringing',?,?,?,0)");$q->execute([$roomId,$user,$other,$now,$now,$now]);
-            return ['id'=>(int)$pdo->lastInsertId(),'room_id'=>$roomId,'caller_id'=>$user,'callee_id'=>$other,'role'=>$role,'status'=>'ringing'];
+            return ['id'=>(int)$pdo->lastInsertId(),'room_id'=>$roomId,'caller_id'=>$user,'callee_id'=>$other,'role'=>$role,'caller_role'=>$role,'status'=>'ringing'];
         });
     }
     public function voiceTransition(int $roomId,int $user,array $data): array
@@ -143,7 +154,7 @@ final class MultiplayerService
         if(!$id||!in_array($action,['accept','decline','end'],true))throw new ApiException('Ação de chamada inválida.');
         $pdo=Database::connection();$q=$pdo->prepare('SELECT * FROM multiplayer_voice_calls WHERE id=? AND room_id=?');$q->execute([$id,$roomId]);$call=$q->fetch();if(!$call)throw new ApiException('Chamada não encontrada.',404);
         $isCaller=(int)$call['caller_id']===$user;$isCallee=(int)$call['callee_id']===$user;if(!$isCaller&&!$isCallee)throw new ApiException('Você não participa desta chamada.',403);
-        if($action==='accept'||$action==='decline'){if(!$isCallee||$call['status']!=='ringing')throw new ApiException('Esta chamada não pode ser atendida.',409);if(time()-(int)$call['created_at']>35){$pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE id=? AND status='ringing'")->execute([time(),$id]);throw new ApiException('Esta chamada expirou.',409);}$status=$action==='accept'?'accepted':'declined';}
+        if($action==='accept'||$action==='decline'){if(!$isCallee||$call['status']!=='ringing')throw new ApiException('Esta chamada não pode ser atendida.',409);if(time()-(int)$call['caller_seen']>90){$pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE id=? AND status='ringing'")->execute([time(),$id]);throw new ApiException('Esta chamada expirou.',409);}$status=$action==='accept'?'accepted':'declined';}
         else{$status='ended';if(!in_array($call['status'],['ringing','accepted'],true))return ['ok'=>true,'status'=>$call['status']];}
         $now=time();$allowed=$action==='end'?"status IN ('ringing','accepted')":"status='ringing'";$q=$pdo->prepare("UPDATE multiplayer_voice_calls SET status=?,updated_at=?,caller_seen=?,callee_seen=? WHERE id=? AND {$allowed}");$q->execute([$status,$now,$now,$now,$id]);if(!$q->rowCount())throw new ApiException('A chamada mudou de estado. Atualize a partida.',409);return ['ok'=>true,'status'=>$status];
     }
@@ -154,7 +165,7 @@ final class MultiplayerService
         $encoded=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);if(strlen($encoded)>64000)throw new ApiException('Sinal de chamada excede o limite.',413);
         $pdo=Database::connection();$q=$pdo->prepare('SELECT * FROM multiplayer_voice_calls WHERE id=? AND room_id=?');$q->execute([$id,$roomId]);$call=$q->fetch();if(!$call)throw new ApiException('Chamada não encontrada.',404);
         $isCaller=(int)$call['caller_id']===$user;$isCallee=(int)$call['callee_id']===$user;if(!$isCaller&&!$isCallee)throw new ApiException('Você não participa desta chamada.',403);
-        if($call['status']==='ringing'&&time()-(int)$call['created_at']>35){$pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE id=? AND status='ringing'")->execute([time(),$id]);throw new ApiException('Esta chamada expirou.',409);}
+        if($call['status']==='ringing'&&time()-(int)$call['caller_seen']>90){$pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE id=? AND status='ringing'")->execute([time(),$id]);throw new ApiException('Esta chamada expirou.',409);}
         $validStatus=$call['status']==='accepted'||($call['status']==='ringing'&&$isCaller&&in_array($type,['offer','ice'],true));if(!$validStatus)throw new ApiException('A chamada não está disponível para sinalização.',409);
         $recipient=$isCaller?(int)$call['callee_id']:(int)$call['caller_id'];$pdo->prepare('INSERT INTO multiplayer_voice_signals(call_id,sender_id,recipient_id,signal_type,payload,created_at) VALUES(?,?,?,?,?,?)')->execute([$id,$user,$recipient,$type,$encoded,time()]);return ['ok'=>true];
     }
@@ -162,9 +173,9 @@ final class MultiplayerService
     {
         $this->requireSchema();[$room]=$this->voiceParticipants($roomId,$user);$pdo=Database::connection();$now=time();
         if(random_int(1,120)===1){$pdo->prepare('DELETE FROM multiplayer_voice_signals WHERE created_at<?')->execute([$now-3600]);$pdo->prepare("DELETE FROM multiplayer_voice_calls WHERE updated_at<? AND status NOT IN ('ringing','accepted')")->execute([$now-86400]);}
-        $pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE room_id=? AND status='ringing' AND created_at<?")->execute([$now,$roomId,$now-35]);
-        $pdo->prepare("UPDATE multiplayer_voice_calls SET status='ended',updated_at=? WHERE room_id=? AND status='accepted' AND (caller_seen<? OR callee_seen<?)")->execute([$now,$roomId,$now-65,$now-65]);
-        $pdo->prepare('UPDATE multiplayer_voice_calls SET '.((int)$room['host_id']===$user?'caller_seen':'callee_seen').'=? WHERE room_id=? AND status IN (\'ringing\',\'accepted\') AND (caller_id=? OR callee_id=?)')->execute([$now,$roomId,$user,$user]);
+        $pdo->prepare("UPDATE multiplayer_voice_calls SET status='missed',updated_at=? WHERE room_id=? AND status='ringing' AND caller_seen<?")->execute([$now,$roomId,$now-90]);
+        $pdo->prepare("UPDATE multiplayer_voice_calls SET status='ended',updated_at=? WHERE room_id=? AND status='accepted' AND (caller_seen<? OR callee_seen<?)")->execute([$now,$roomId,$now-90,$now-90]);
+        $pdo->prepare("UPDATE multiplayer_voice_calls SET caller_seen=CASE WHEN caller_id=? THEN ? ELSE caller_seen END,callee_seen=CASE WHEN callee_id=? THEN ? ELSE callee_seen END WHERE room_id=? AND status IN ('ringing','accepted') AND (caller_id=? OR callee_id=?)")->execute([$user,$now,$user,$now,$roomId,$user,$user]);
         $q=$pdo->prepare("SELECT id,room_id,caller_id,callee_id,status,created_at FROM multiplayer_voice_calls WHERE room_id=? AND (status IN ('ringing','accepted') OR updated_at>=?) ORDER BY id DESC LIMIT 1");$q->execute([$roomId,$now-120]);$call=$q->fetch()?:null;
         if($call){foreach(['id','room_id','caller_id','callee_id','created_at'] as $key)$call[$key]=(int)$call[$key];$call['caller_role']=(int)$call['caller_id']===(int)$room['host_id']?'host':'guest';}
         $q=$pdo->prepare("SELECT s.id,s.call_id,s.signal_type,s.payload FROM multiplayer_voice_signals s JOIN multiplayer_voice_calls c ON c.id=s.call_id WHERE c.room_id=? AND s.recipient_id=? AND s.id>? AND c.status IN ('ringing','accepted') ORDER BY s.id LIMIT 100");$q->execute([$roomId,$user,max(0,$after)]);$signals=$q->fetchAll();

@@ -4,7 +4,7 @@ import{CameraManager}from'../../public/assets/js/ar/CameraManager.js';import{Sur
 import{IOSSurfaceAdapter}from'../../public/assets/js/ar/IOSSurfaceAdapter.js';
 let elements,notifications,bodyClasses;
 const element=()=>({textContent:'',hidden:false,style:{},setAttribute(){},videoWidth:640,videoHeight:480,async play(){},pause(){},remove(){this.removed=true}});
-beforeEach(()=>{elements=new Map();notifications=[];bodyClasses=new Set();globalThis.window={isSecureContext:true};Object.defineProperty(globalThis,'navigator',{value:{mediaDevices:{}},configurable:true});globalThis.document={getElementById:id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id)},querySelector:id=>document.getElementById(id),createElement:element,body:{classList:{add:n=>bodyClasses.add(n),remove:n=>bodyClasses.delete(n)}}};});
+beforeEach(()=>{elements=new Map();notifications=[];bodyClasses=new Set();globalThis.window={isSecureContext:true};Object.defineProperty(globalThis,'navigator',{value:{mediaDevices:{},xr:{requestSession:()=>Promise.resolve({end:async()=>{}})}},configurable:true});globalThis.document={getElementById:id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id)},querySelector:id=>document.getElementById(id),createElement:element,body:{classList:{add:n=>bodyClasses.add(n),remove:n=>bodyClasses.delete(n)}}};});
 function arenaMock(){const scene=new THREE.Scene(),board=new THREE.Group();scene.add(board);return{scene,board,stars:{visible:true},renderer:{setClearAlpha(){},domElement:{style:{}}},resetCamera(){},resize(){},monsters:{dispose:r=>r.removeFromParent()},burst(){},camera:new THREE.PerspectiveCamera(),container:{}};}
 test('Câmera pede vídeo traseiro sem microfone e encerra os tracks',async()=>{let constraints,stops=0;const track={stop:()=>stops++};navigator.mediaDevices.getUserMedia=async c=>{constraints=c;return{getTracks:()=>[track]}};const manager=new CameraManager();const video=await manager.start({prepend(){}});assert.equal(constraints.audio,false);assert.equal(constraints.video.facingMode.ideal,'environment');assert.ok(video.srcObject);manager.stop();assert.equal(stops,1);assert.equal(manager.video,null);});
 test('Safari no iPhone pede captura traseira em resolução leve',async()=>{navigator.userAgent='Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Version/15.0 Mobile Safari/604.1';let constraints;navigator.mediaDevices.getUserMedia=async c=>{constraints=c;return{getTracks:()=>[{stop(){}}]}};const manager=new CameraManager();await manager.start({prepend(){}});assert.equal(constraints.video.facingMode.ideal,'environment');assert.equal(constraints.video.width.ideal,640);assert.equal(constraints.video.height.ideal,480);assert.equal(constraints.video.frameRate.max,30);manager.stop();});
@@ -23,3 +23,20 @@ test('iPhone sem WebXR usa o rastreador de marcadores',async()=>{const manager=n
 test('Android com WebXR prioriza superfície e oferece marcador se falhar',async()=>{const manager=new ARManager(arenaMock(),[],()=>{},()=>{});manager.capabilityCache={webxr:true,marker:true,secure:true};const modes=[];manager.setMode=async mode=>{manager.operation++;modes.push(mode);return mode==='marker'};assert.equal(await manager.startPreferred(),true);assert.deepEqual(modes,['webxr','marker']);});
 test('Permissão negada no WebXR não provoca nova solicitação de câmera',async()=>{const manager=new ARManager(arenaMock(),[],()=>{},()=>{});manager.capabilityCache={webxr:true,marker:true,secure:true};const modes=[];manager.setMode=async mode=>{manager.operation++;modes.push(mode);manager.lastError={name:'NotAllowedError'};return false};await manager.startPreferred();assert.deepEqual(modes,['webxr']);});
 test('Cancelar WebXR durante abertura não inicia câmera de marcador',async()=>{const manager=new ARManager(arenaMock(),[],()=>{},()=>{});manager.capabilityCache={webxr:true,marker:true,secure:true};const modes=[];manager.setMode=async mode=>{manager.operation+=2;modes.push(mode);return false};await manager.startPreferred();assert.deepEqual(modes,['webxr']);});
+
+test('Convite sem gesto abre ativacao direta e nunca cai em camera sem reticulo',async()=>{
+ navigator.userActivation={isActive:false};const manager=new ARManager(arenaMock(),[],()=>{},()=>{});manager.capabilityCache={webxr:true,marker:true,secure:true};let starts=0;manager.setMode=async()=>{starts++;return true;};
+ await manager.openRoom();assert.equal(starts,0);assert.equal(document.getElementById('room-ar-entry').hidden,false);
+ navigator.userActivation.isActive=true;let reserved=false;navigator.xr.requestSession=()=>{reserved=true;return Promise.resolve({end:async()=>{}});};
+ manager.setMode=async(mode,session)=>{assert.equal(mode,'webxr');assert.equal(reserved,true);assert.ok(session);return true;};await document.getElementById('room-ar-activate').onclick();
+});
+test('Fonte de hit-test e substituida ao retomar sem vazar fontes antigas',async()=>{
+ const detector=new SurfaceDetector(new THREE.Scene());let canceled=0;
+ const session={requestReferenceSpace:async()=>({}),requestHitTestSource:async()=>({cancel:()=>canceled++})};
+ await detector.initialize(session);await detector.initialize(session);assert.equal(canceled,1);detector.dispose();assert.equal(canceled,2);
+});
+
+test('Android sem WebXR no navegador usa rastreamento de superficie em vez de marcadores',async()=>{
+ navigator.userAgent='Android';navigator.mediaDevices.getUserMedia=()=>{};globalThis.DeviceMotionEvent={};
+ try{const manager=new ARManager(arenaMock(),[],()=>{},()=>{});manager.capabilityCache={webxr:false,marker:true,secure:true};const modes=[];manager.setMode=async mode=>{manager.operation++;modes.push(mode);return true;};await manager.startPreferred();assert.deepEqual(modes,['ios-surface']);}finally{delete globalThis.DeviceMotionEvent;}
+});
