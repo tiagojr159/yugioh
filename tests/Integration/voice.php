@@ -21,3 +21,12 @@ test('Token do socket assina sala e papel do jogador com validade curta',functio
     try{$issued=$voice->voiceSocketToken($room['id'],$guest);check($issued['enabled']);$parts=explode('.',$issued['token']);same(2,count($parts));$expected=rtrim(strtr(base64_encode(hash_hmac('sha256',$parts[0],str_repeat('s',48),true)),'+/','-_'),'=');same($expected,$parts[1]);$raw=base64_decode(strtr($parts[0],'-_','+/').str_repeat('=',(4-strlen($parts[0])%4)%4),true);$claims=json_decode($raw,true);same($room['id'],$claims['room']);same($guest,$claims['uid']);same('guest',$claims['role']);check($claims['exp']>time()&&$claims['exp']<=time()+90);}
     finally{$oldSecret===false?putenv('VOICE_SOCKET_SECRET'):putenv('VOICE_SOCKET_SECRET='.$oldSecret);$oldUrl===false?putenv('VOICE_WS_URL'):putenv('VOICE_WS_URL='.$oldUrl);}
 });
+
+test('Primeiro acesso ao multiplayer aplica automaticamente as migrations pendentes',function()use($userId){
+    $pdo=App\Core\Database::connection();
+    $pdo->exec('DROP TABLE IF EXISTS multiplayer_voice_signals');$pdo->exec('DROP TABLE IF EXISTS multiplayer_voice_calls');$pdo->exec('DROP TABLE IF EXISTS multiplayer_invites');$pdo->exec('DROP TABLE IF EXISTS online_presence');$pdo->exec('DROP TABLE IF EXISTS multiplayer_rooms');
+    $pdo->exec("DELETE FROM migrations WHERE name IN ('002_multiplayer','003_voice_calls','004_multiplayer_voice')");
+    (new MultiplayerService())->presence($userId);
+    foreach(['online_presence','multiplayer_rooms','multiplayer_invites','multiplayer_voice_calls','multiplayer_voice_signals'] as $table){$q=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?");$q->execute([$table]);check((bool)$q->fetchColumn(),'Tabela ausente apos instalacao automatica: '.$table);}
+    $columns=$pdo->query('PRAGMA table_info(multiplayer_rooms)')->fetchAll(PDO::FETCH_COLUMN,1);check(in_array('voice_key',$columns,true),'Coluna voice_key ausente apos instalacao automatica.');
+});

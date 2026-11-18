@@ -5,6 +5,7 @@
 /.env
 /.env.hostgator
 /storage/*.sqlite*
+/storage/migrations.lock
 /storage/mysql/
 /storage/logs/*
 !/storage/logs/.gitkeep

@@ -2,7 +2,7 @@
 
 ## Atualizar um jogo já instalado para multiplayer
 
-Após enviar os novos arquivos, execute `php bin/console.php migrate` no diretório do projeto usando PHP 8.2 ou superior. Para usar o phpMyAdmin, selecione o banco do jogo e importe o arquivo `database/migrations/002_multiplayer.sql`. O arquivo acrescenta as tabelas de salas, presença e convites sem apagar as tabelas existentes. Ambos os jogadores devem abrir o jogo para aparecer na lista online; jogadores que não estão conectados podem receber o link de uma sala.
+Ao usar uma funcao multiplayer pela primeira vez, o jogo aplica automaticamente as migrations pendentes 002, 003 e 004 no banco configurado em `.env`. O usuario MySQL precisa ter permissao para criar tabelas e adicionar colunas. Se preferir, execute manualmente `php bin/console.php migrate` no diretorio do projeto ou importe os arquivos SQL 002, 003 e 004 em ordem pelo phpMyAdmin, uma unica vez cada.
 
 O pacote `arcana-servidor.zip` já inclui o backend, a interface, o Three.js, o rastreador AR.js, as seis criaturas e os marcadores. Não é necessário instalar Node.js ou Composer na hospedagem.
 

@@ -4,7 +4,7 @@ O Yugioh segue o desenho usado no Navestar: um daemon WebSocket PHP opcional aco
 
 ## Banco de dados
 
-Envie os arquivos novos e aplique as migracoes 003 e 004. No terminal, execute `php bin/console.php migrate`. No phpMyAdmin, importe `database/migrations/003_voice_calls.sql` e `database/migrations/004_multiplayer_voice.sql` no banco do jogo.
+Envie os arquivos novos. No primeiro acesso ao multiplayer, o jogo aplica automaticamente as migrations 002, 003 e 004 no banco configurado em `.env`; o usuario MySQL precisa ter permissao para criar tabelas e adicionar colunas. Como alternativa, execute `php bin/console.php migrate` ou importe os arquivos SQL 002, 003 e 004 em ordem pelo phpMyAdmin, uma unica vez cada.
 
 ## Configurar o socket
 

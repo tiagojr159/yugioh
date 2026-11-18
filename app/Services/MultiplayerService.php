@@ -9,16 +9,29 @@ final class MultiplayerService
 {
     private function requireSchema(): void
     {
-        $pdo=Database::connection();
-        foreach(['online_presence','multiplayer_rooms','multiplayer_invites'] as $table){
-            if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$q=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");$q->execute([$table]);}
+        $this->ensureMultiplayerMigrations();
+    }
+    private function ensureMultiplayerMigrations(): void
+    {
+        $pdo=Database::connection();$sqlite=$pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite';
+        $hasTable=static function(string $table)use($pdo,$sqlite):bool{
+            if($sqlite){$q=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");$q->execute([$table]);}
             else{$q=$pdo->prepare('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? LIMIT 1');$q->execute([$table]);}
-            $exists=$q->fetchColumn();
-            if(!$exists)throw new ApiException('O banco ainda não tem as tabelas do multiplayer. Importe database/migrations/002_multiplayer.sql no phpMyAdmin e tente de novo.',503);
-        }
-        if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$columns=$pdo->query('PRAGMA table_info(multiplayer_rooms)')->fetchAll(\PDO::FETCH_COLUMN,1);$hasVoiceKey=in_array('voice_key',$columns,true);}
-        else{$q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='multiplayer_rooms' AND COLUMN_NAME='voice_key'");$q->execute();$hasVoiceKey=(bool)$q->fetchColumn();}
-        if(!$hasVoiceKey)throw new ApiException('Atualize o banco: importe database/migrations/003_voice_calls.sql no phpMyAdmin e tente novamente.',503);
+            return (bool)$q->fetchColumn();
+        };
+        if(!$hasTable('migrations'))throw new ApiException('O banco ainda nao foi instalado. Conclua a instalacao inicial antes de criar uma sala.',503);
+        $tables=['online_presence','multiplayer_rooms','multiplayer_invites','multiplayer_voice_calls','multiplayer_voice_signals'];
+        $complete=true;foreach($tables as $table)if(!$hasTable($table)){$complete=false;break;}
+        if($sqlite){$columns=$pdo->query('PRAGMA table_info(multiplayer_rooms)')->fetchAll(\PDO::FETCH_COLUMN,1);$hasVoiceKey=in_array('voice_key',$columns,true);}
+        else{$q=$pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='multiplayer_rooms' AND COLUMN_NAME='voice_key' LIMIT 1");$q->execute();$hasVoiceKey=(bool)$q->fetchColumn();}
+        $q=$pdo->query("SELECT name FROM migrations WHERE name IN ('002_multiplayer','003_voice_calls','004_multiplayer_voice')");$applied=$q->fetchAll(\PDO::FETCH_COLUMN);
+        if($complete&&$hasVoiceKey&&count($applied)===3)return;
+        try{require_once BASE_PATH.'/database/migrations/Migrator.php';\Database\Migrator::run(true);}
+        catch(\Throwable $e){error_log('[ARCANA multiplayer migration] '.$e->getMessage());throw new ApiException('Nao foi possivel preparar o banco automaticamente. Confira se DB_DATABASE e o banco correto e se o usuario MySQL tem permissao para criar tabelas e adicionar colunas.',503);}
+        $complete=true;foreach($tables as $table)if(!$hasTable($table)){$complete=false;break;}
+        if($sqlite){$columns=$pdo->query('PRAGMA table_info(multiplayer_rooms)')->fetchAll(\PDO::FETCH_COLUMN,1);$hasVoiceKey=in_array('voice_key',$columns,true);}
+        else{$q=$pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='multiplayer_rooms' AND COLUMN_NAME='voice_key' LIMIT 1");$q->execute();$hasVoiceKey=(bool)$q->fetchColumn();}
+        if(!$complete||!$hasVoiceKey)throw new ApiException('A instalacao automatica do multiplayer nao terminou. Confira o banco e as permissoes CREATE e ALTER do usuario MySQL.',503);
     }
     private function room(int $id,bool $lock=false): array
     {
@@ -84,6 +97,7 @@ final class MultiplayerService
     }
     private function requireVoiceSchema(): void
     {
+        $this->ensureMultiplayerMigrations();
         $pdo=Database::connection();
         foreach(['multiplayer_voice_calls','multiplayer_voice_signals'] as $table){
             if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$q=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");$q->execute([$table]);}
