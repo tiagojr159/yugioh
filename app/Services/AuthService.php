@@ -8,7 +8,7 @@ final class AuthService
 {
     public function register(array $data,bool $guest=false): array
     {
-        $name=Input::text($data,'name',2,60);$email=strtolower(Input::text($data,'email',5,190));$password=Input::text($data,'password',8,128);
+        $name=Input::text($data,'name',2,60);$email=strtolower(Input::text($data,'email',5,190));$password=Input::text($data,'password',3,128);
         if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new ApiException('Informe um e-mail válido.');
         $repo=new UserRepository();if($repo->byEmail($email))throw new ApiException('Não foi possível cadastrar este e-mail.');
         $id=Database::transaction(function()use($repo,$name,$email,$password,$guest){$id=$repo->create($name,$email,password_hash($password,PASSWORD_DEFAULT),$guest);(new PlayerService())->provision($id);return $id;});

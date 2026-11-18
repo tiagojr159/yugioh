@@ -16,4 +16,4 @@
 </main>
 <div class="toast-stack" id="toasts" aria-live="polite"></div>
 <dialog id="modal"><div class="modal-header"><div><p class="eyebrow">ARCANA / SEU UNIVERSO</p><h2 id="modal-title"></h2></div><button class="icon-button" id="modal-close" aria-label="Fechar"><?= icon('close') ?></button></div><div id="modal-content"></div></dialog>
-<script type="module" src="assets/js/app.js?v=20261118-5"></script></body></html>
+<script type="module" src="assets/js/app.js?v=20261118-6"></script></body></html>
