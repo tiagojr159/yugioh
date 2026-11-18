@@ -1,12 +1,13 @@
 import {$,toast,modal,escape} from '../ui/HUDManager.js';
 export class BattleManager{
  constructor(api,arena,animation,hud,cardManager,onResult){Object.assign(this,{api,arena,animation,hud,cardManager,onResult});this.state=null;this.busy=false;}
- async load(id){const s=await this.api.request('battles/'+id);await this.setState(s);return s;}
+ path(id){return (this.multiplayer?'multiplayer/rooms/':'battles/')+id;}
+ async load(id){const s=await this.api.request(this.path(id));await this.setState(s);return s;}
  async setState(s){this.state=s;document.querySelector('#ar-begin-panel').hidden=true;if(s.catalog?.length){this.cardManager.cards=s.catalog;this.animation.cards=s.catalog;}await this.arena.sync(s,this.cardManager.cards);this.arena.arAdapter?.syncState?.(s);if(s.player.hand.length&&!s.player.hand.includes(this.cardManager.selected?.id))this.cardManager.selected=this.cardManager.cards.find(c=>c.id===s.player.hand[0]);this.cardManager.render(s.player.hand);this.update();}
  update(){this.hud.update(this.state,this.cardManager.selected,this.user,this.busy);}
  async action(action,data={}){
   if(this.busy||!this.state)return;this.busy=true;this.update();document.body.classList.add('busy');
-  try{const s=await this.api.request('battles/'+this.state.id+'/'+action,{method:'POST',data:{...data,version:this.state.version}});try{await this.animation.play(s.events)}catch(e){console.warn('Animação interrompida:',e.message)}await this.setState(s);if(s.status==='finished')this.onResult(s);}
+  try{const s=await this.api.request(this.path(this.state.id)+'/'+action,{method:'POST',data:{...data,version:this.state.version}});try{await this.animation.play(s.events)}catch(e){console.warn('Animação interrompida:',e.message)}await this.setState(s);if(s.status==='finished')this.onResult(s);}
   catch(e){toast(e.message,true);if([0,409].includes(e.status)){try{await this.load(this.state.id);toast('Partida sincronizada. Você pode continuar.')}catch{}}}
   finally{this.busy=false;document.body.classList.remove('busy');this.update();}
  }

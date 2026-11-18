@@ -20,6 +20,16 @@ $router->add('POST','/api/battles/{id}/surrender',[BattleController::class,'surr
 $router->add('GET','/api/players/me',[PlayerController::class,'me']);
 $router->add('GET','/api/players/me/statistics',[PlayerController::class,'statistics']);
 $router->add('GET','/api/players/me/collection',[PlayerController::class,'collection']);
+$router->add('GET','/api/multiplayer/presence',[\App\Controllers\MultiplayerController::class,'presence']);
+$router->add('POST','/api/multiplayer/rooms',[\App\Controllers\MultiplayerController::class,'create']);
+$router->add('GET','/api/multiplayer/rooms/{id}',[\App\Controllers\MultiplayerController::class,'show']);
+$router->add('POST','/api/multiplayer/rooms/{id}/join',[\App\Controllers\MultiplayerController::class,'join']);
+$router->add('POST','/api/multiplayer/rooms/{id}/accept',[\App\Controllers\MultiplayerController::class,'accept']);
+$router->add('POST','/api/multiplayer/invites/{id}/decline',[\App\Controllers\MultiplayerController::class,'decline']);
+$router->add('POST','/api/multiplayer/rooms/{id}/summon',[\App\Controllers\MultiplayerController::class,'summon']);
+$router->add('POST','/api/multiplayer/rooms/{id}/attack',[\App\Controllers\MultiplayerController::class,'attack']);
+$router->add('POST','/api/multiplayer/rooms/{id}/end-turn',[\App\Controllers\MultiplayerController::class,'endTurn']);
+$router->add('POST','/api/multiplayer/rooms/{id}/surrender',[\App\Controllers\MultiplayerController::class,'surrender']);
 $router->add('GET','/api/admin/cards',[AdminController::class,'cards'],true,true);
 $router->add('POST','/api/admin/cards',[AdminController::class,'create'],true,true);
 $router->add('PUT','/api/admin/cards/{id}',[AdminController::class,'update'],true,true);

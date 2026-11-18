@@ -22,3 +22,22 @@ test('Middleware exige sessão e perfil de administrador',function()use($userId)
 
 test('Auditoria pública oculta compras da mão adversária',function()use($svc,$userId,$deckId){$s=$svc->create($userId,$deckId);$s=$svc->action($s['id'],$userId,'end-turn',['version'=>$s['version']]);$events=(new App\Repositories\BattleRepository())->history($s['id'],$userId);foreach($events as$event){$payload=$event['payload'];if($payload['type']==='draw'&&$payload['side']==='ai')check(!isset($payload['card_id']));}check(count($s['catalog'])>=6);});
 test('Rate limiting rejeita excesso de ações críticas',function(){$_SERVER['REMOTE_ADDR']='test-'.bin2hex(random_bytes(8));App\Middleware\RateLimit::check('/api/auth/login',2);App\Middleware\RateLimit::check('/api/auth/login',2);rejects(fn()=>App\Middleware\RateLimit::check('/api/auth/login',2),429);});
+
+test('Sala compartilhada protege o acesso e alterna turnos entre jogadores',function()use($auth,$userId,$other,$deckId){
+    $mp=new App\Services\MultiplayerService();$guest=(int)$other['id'];$guestDeck=(new DeckService())->all($guest)[0]['id'];
+    $third=$auth->register(['name'=>'Terceiro','email'=>'third@example.org','password'=>'123']);$thirdDeck=(new DeckService())->all($third['id'])[0]['id'];
+    $room=$mp->create($userId,['deck_id'=>$deckId]);$id=$room['id'];
+    rejects(fn()=>$mp->join($id,$guest,['deck_id'=>$guestDeck,'token'=>'incorreto']),403);
+    $second=$mp->join($id,$guest,['deck_id'=>$guestDeck,'token'=>$room['token']]);$first=$mp->get($id,$userId);
+    same('player',$first['active_side']);same('ai',$second['active_side']);check(!isset($first['ai']['hand'],$second['ai']['hand'],$first['ai']['deck']));
+    rejects(fn()=>$mp->get($id,$third['id']),403);rejects(fn()=>$mp->join($id,$third['id'],['deck_id'=>$thirdDeck,'token'=>$room['token']]),409);
+    rejects(fn()=>$mp->action($id,$guest,'end-turn',['version'=>$second['version']]));
+    $first=$mp->action($id,$userId,'end-turn',['version'=>$first['version']]);same('ai',$first['active_side']);
+    rejects(fn()=>$mp->action($id,$userId,'end-turn',['version'=>$first['version']]));
+    rejects(fn()=>$mp->action($id,$guest,'end-turn',['version'=>$second['version']]),409);
+    $second=$mp->get($id,$guest);same('player',$second['active_side']);$second=$mp->action($id,$guest,'end-turn',['version'=>$second['version']]);same('ai',$second['active_side']);
+});
+test('Convite online é restrito ao destinatário',function()use($userId,$other,$deckId){
+    $mp=new App\Services\MultiplayerService();$guest=(int)$other['id'];$mp->presence($guest);$room=$mp->create($userId,['deck_id'=>$deckId,'invite_user_id'=>$guest]);$inbox=$mp->presence($guest);check(count($inbox['invites'])>0);
+    $deck=(new DeckService())->all($guest)[0]['id'];$joined=$mp->join($room['id'],$guest,['deck_id'=>$deck],true);same('active',$joined['status']);same([], $mp->presence($guest)['invites']);
+});

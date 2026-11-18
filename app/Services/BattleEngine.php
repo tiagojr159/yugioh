@@ -58,6 +58,11 @@ final class BattleEngine
         }
         if($s['status']==='active')$this->beginTurn($s,'player');
     }
+    public function endHumanTurn(array &$s,string $side): void
+    {
+        $this->requireTurn($s,$side);
+        $this->beginTurn($s,$side==='player'?'ai':'player');
+    }
     private function beginTurn(array &$s,string $side): void
     {
         $s['turn']++;$s['active_side']=$side;$p=&$s[$side];$p['summoned']=false;$p['max_energy']=min(10,3+(int)floor(($s['turn']-1)/2));$p['energy']=$p['max_energy'];
