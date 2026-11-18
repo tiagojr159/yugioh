@@ -7,6 +7,15 @@ use App\Validators\Input;
 
 final class MultiplayerService
 {
+    private function requireSchema(): void
+    {
+        $pdo=Database::connection();
+        foreach(['online_presence','multiplayer_rooms','multiplayer_invites'] as $table){
+            if($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='sqlite'){$q=$pdo->prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?");$q->execute([$table]);$exists=$q->fetchColumn();}
+            else{$q=$pdo->prepare('SHOW TABLES LIKE ?');$q->execute([$table]);$exists=$q->fetchColumn();}
+            if(!$exists)throw new ApiException('O banco ainda não tem as tabelas do multiplayer. Importe database/migrations/002_multiplayer.sql no phpMyAdmin e tente de novo.',503);
+        }
+    }
     private function room(int $id,bool $lock=false): array
     {
         $pdo=Database::connection();$q=$pdo->prepare('SELECT * FROM multiplayer_rooms WHERE id=?'.($lock&&$pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':''));$q->execute([$id]);
@@ -19,6 +28,7 @@ final class MultiplayerService
     }
     public function presence(int $user): array
     {
+        $this->requireSchema();
         $pdo=Database::connection();$q=$pdo->prepare('UPDATE online_presence SET seen_at=? WHERE user_id=?');$q->execute([time(),$user]);
         if(!$q->rowCount()){try{$pdo->prepare('INSERT INTO online_presence(user_id,seen_at) VALUES (?,?)')->execute([$user,time()]);}catch(\PDOException $e){$q->execute([time(),$user]);}}
         $q=$pdo->prepare('SELECT users.id,users.name,users.is_guest FROM online_presence JOIN users ON users.id=online_presence.user_id WHERE online_presence.seen_at>=? AND users.id<>? ORDER BY users.name LIMIT 100');$q->execute([time()-45,$user]);
@@ -28,6 +38,7 @@ final class MultiplayerService
     }
     public function create(int $user,array $data): array
     {
+        $this->requireSchema();
         $deck=Input::integer($data,'deck_id',1,PHP_INT_MAX);$this->deck($user,$deck);$invite=isset($data['invite_user_id'])?Input::integer($data,'invite_user_id',1,PHP_INT_MAX):null;
         if($invite===$user)throw new ApiException('Escolha outro jogador.');
         if($invite){$q=Database::connection()->prepare('SELECT user_id FROM online_presence WHERE user_id=? AND seen_at>=?');$q->execute([$invite,time()-45]);if(!$q->fetch())throw new ApiException('Este jogador não está mais online.');}
@@ -35,6 +46,7 @@ final class MultiplayerService
     }
     public function join(int $id,int $user,array $data,bool $invite=false): array
     {
+        $this->requireSchema();
         $deck=Input::integer($data,'deck_id',1,PHP_INT_MAX);$guestDeck=$this->deck($user,$deck);
         return Database::transaction(function($pdo)use($id,$user,$data,$invite,$guestDeck){
             $r=$this->room($id,true);if((int)$r['host_id']===$user || (int)($r['guest_id']??0)===$user)return $this->view($r,$user);
@@ -47,7 +59,7 @@ final class MultiplayerService
             $pdo->prepare("UPDATE multiplayer_invites SET status='accepted' WHERE room_id=? AND recipient_id=? AND status='pending'")->execute([$id,$user]);return $this->view($this->room($id),$user);
         });
     }
-    public function get(int $id,int $user): array { return $this->view($this->room($id),$user); }
+    public function get(int $id,int $user): array { $this->requireSchema();return $this->view($this->room($id),$user); }
     private function view(array $r,int $user): array
     {
         $host=(int)$r['host_id']===$user;$guest=(int)($r['guest_id']??0)===$user;if(!$host&&!$guest)throw new ApiException('Você não participa desta sala.',403);
@@ -60,6 +72,7 @@ final class MultiplayerService
     }
     public function action(int $id,int $user,string $action,array $data): array
     {
+        $this->requireSchema();
         $version=Input::integer($data,'version',1,PHP_INT_MAX);
         return Database::transaction(function($pdo)use($id,$user,$action,$data,$version){$r=$this->room($id,true);$host=(int)$r['host_id']===$user;$guest=(int)($r['guest_id']??0)===$user;if(!$host&&!$guest)throw new ApiException('Você não participa desta sala.',403);if($r['status']!=='active')throw new ApiException('A partida não está ativa.',409);if((int)$r['version']!==$version)throw new ApiException('A partida mudou. Sincronize e tente novamente.',409);
             $s=json_decode($r['state_json'],true,64,JSON_THROW_ON_ERROR);$s['events']=[];$side=$host?'player':'ai';$engine=new BattleEngine($s['card_snapshot']);
