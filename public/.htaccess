@@ -10,3 +10,8 @@ AddType text/javascript .js .mjs
 AddType application/wasm .wasm
 AddType model/gltf-binary .glb
 AddType application/octet-stream .patt .dat
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|mjs|css)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>

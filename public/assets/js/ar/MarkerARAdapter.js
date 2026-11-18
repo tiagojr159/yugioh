@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {CameraManager} from './CameraManager.js';
+import {CameraManager} from './CameraManager.js?v=20261118-2';
 export async function checkTrackerSupport(){
  if(typeof WebAssembly==='undefined')throw Error('Este navegador não oferece suporte ao rastreador AR. Atualize o iOS e o Safari.');
  try{await WebAssembly.compile(new Uint8Array([0,97,115,109,1,0,0,0]));}
@@ -22,7 +22,7 @@ export class MarkerARAdapter{
  async start(){
   this.stopped=false;
   await checkTrackerSupport();if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
-  const video=await this.camera.start(this.arena.container);if(this.stopped)throw new DOMException('AR cancelada.','AbortError');this.message('Câmera aberta. Carregando o rastreador AR…');const {ArToolkitContext,ArMarkerControls}=await import('../../vendor/ar-threex.mjs');if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
+  const video=await this.camera.start(this.arena.container);if(this.stopped)throw new DOMException('AR cancelada.','AbortError');this.message('Câmera aberta. Carregando o rastreador AR…');const {ArToolkitContext,ArMarkerControls}=await import('../../vendor/ar-threex.mjs?v=20261118-2');if(this.stopped)throw new DOMException('AR cancelada.','AbortError');
   // AR.js's phone profile is 320x240. Safari on iPhone can stall while
   // allocating its tracker at desktop-sized resolutions although the camera
   // stream is already live.

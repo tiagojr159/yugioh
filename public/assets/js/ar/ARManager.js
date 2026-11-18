@@ -1,6 +1,6 @@
 
 import {WebXRAdapter} from './WebXRAdapter.js';
-import {MarkerARAdapter} from './MarkerARAdapter.js';
+import {MarkerARAdapter} from './MarkerARAdapter.js?v=20261118-2';
 /** Seleção de capacidades, ciclo de câmera e retorno seguro da sessão AR. */
 export class ARManager{
  constructor(arena,cards,onCard,notify){Object.assign(this,{arena,cards,onCard,notify});this.mode='3d';this.operation=0;this.switching=false;this.message=text=>{const el=document.getElementById('ar-instruction');el.textContent=text;el.hidden=!text;};}
