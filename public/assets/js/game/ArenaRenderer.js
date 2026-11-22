@@ -71,7 +71,38 @@ export class ArenaRenderer{
  }
  async addEventMonster(event){if(this.units.has(event.monster.id))return;const side=event.side,card=this.cards.get(event.card_id);if(!card)return;const root=await this.monsters.create(card,{procedural:!!this.battleState?.multiplayer||this.mode!=='3d'});root.userData.unit={...event.monster,side};const index=[...this.units.values()].filter(u=>u.root.userData.unit?.side===side).length;root.position.set((index-1)*1.65,.08,side==='player'?1.5:-1.5);root.rotation.y=side==='player'?0:Math.PI;this.board.add(root);if(this.stereoEnabled)this.addCreatureAura(root,card.color);this.units.set(event.monster.id,{root});this.arAdapter?.bindSummon?.(event);}
  getUnitRoot(id){return this.arAdapter?.rootForUnit?.(id)||this.units.get(id)?.root;}
- gestureTargetAt(x,y){this.scene.updateMatrixWorld(true);this.camera.updateMatrixWorld(true);const contains=(world,rx,ry)=>{const p=world.clone().project(this.camera),sx=(p.x+1)/2,sy=(1-p.y)/2;return p.z>-1&&p.z<1&&Math.abs(sx-x)<rx&&Math.abs(sy-y)<ry;};for(const {root}of this.units.values()){if(root.userData.unit?.side!=='ai')continue;const point=root.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,1.1,0));if(contains(point,.17,.24))return root.userData.unit.id;}const avatar=new THREE.Vector3(0,1.25,-7.3).applyMatrix4(this.board.matrixWorld);return contains(avatar,.34,.45)?'avatar':null;}
+ gestureCreatureAt(x,y,eye=0){
+  if(this.mode!=='3d'||x<0||x>1||y<0||y>1)return null;
+  this.camera.updateMatrixWorld(true);
+  let camera=this.camera;
+  if(this.stereoEnabled){
+   this.stereoCamera.update(this.camera);
+   camera=eye===0?this.stereoCamera.cameraL:this.stereoCamera.cameraR;
+   camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+   camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+  }
+  const roots=[...this.units.values()].map(unit=>unit.root).filter(root=>root.visible&&root.userData.unit);
+  for(const root of roots)root.updateWorldMatrix(true,true);
+  this.pointer.set(x*2-1,1-y*2);
+  this.raycaster.setFromCamera(this.pointer,camera);
+  for(const {object} of this.raycaster.intersectObjects(roots,true)){
+   let node=object;
+   while(node&&!node.userData.unit){
+    if(!node.visible||node.name==='Creature arcane aura')break;
+    node=node.parent;
+   }
+   if(node?.userData.unit)return node.userData.unit.side==='player'?node.userData.unit:null;
+  }
+  // Aceite também a área em torno da base da carta.
+  let closest=null,bestDistance=.065;
+  for(const root of roots){
+   const base=root.getWorldPosition(new THREE.Vector3()).project(camera);
+   if(Math.abs(base.z)>=1)continue;
+   const distance=Math.hypot((base.x+1)/2-x,(1-base.y)/2-y);
+   if(distance<bestDistance){closest=root.userData.unit;bestDistance=distance;}
+  }
+  return closest?.side==='player'?closest:null;
+ }
  burst(position,color='#e7bd79',parent=this.board){const budget=this.quality==='low'?12:34;for(let i=0;i<budget;i++){const mesh=new THREE.Mesh(new THREE.OctahedronGeometry(.035),new THREE.MeshBasicMaterial({color,transparent:true}));mesh.position.copy(position);parent.add(mesh);this.effects.push({mesh,velocity:new THREE.Vector3((Math.random()-.5)*3,Math.random()*2.8,(Math.random()-.5)*3),life:1});}const ring=new THREE.Mesh(new THREE.TorusGeometry(.5,.024,7,64),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.95,blending:THREE.AdditiveBlending,depthWrite:false}));ring.rotation.x=Math.PI/2;ring.position.copy(position);ring.position.y+=.08;parent.add(ring);this.effects.push({mesh:ring,velocity:new THREE.Vector3(0,.9,0),life:1,ring:true});}
  removeUnit(key){const u=this.units.get(key);if(!u)return;if(u.label){u.label.material.map.dispose();u.label.material.dispose();u.label.removeFromParent();}const auraData=u.root.userData.arcaneAuraData;if(auraData&&this.creatureAuras)this.creatureAuras=this.creatureAuras.filter(item=>item!==auraData);this.monsters.dispose(u.root);this.units.delete(key);}
  clearUnits(){for(const key of[...this.units.keys()])this.removeUnit(key);}

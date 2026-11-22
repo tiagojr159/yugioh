@@ -13,6 +13,7 @@ export class ARManager{
  async setMode(mode,preparedSession){
   if(mode==='3d'){await this.close();return true;}
   if(this.switching)return false;
+  this.onBeforeCamera?.();
   const operation=++this.operation;this.switching=true;
   try{
    await this.restore();const caps=await this.capabilities();if(operation!==this.operation){if(preparedSession)(await preparedSession).end();return false;}
@@ -45,6 +46,7 @@ export class ARManager{
  }
  async startPreferred(){
   if(this.mode!=='3d')return true;if(this.switching)return false;
+  this.onBeforeCamera?.();
   const ua=navigator.userAgent||'';const ios=/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/i.test(ua)&&navigator.maxTouchPoints>1);const mobile=ios||/Android/i.test(ua);
   if(ios&&navigator.userActivation?.isActive===false)return this.showEntry();
   // iOS requires this call to occur directly within the user's button tap.

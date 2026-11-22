@@ -28,12 +28,18 @@ export class BattleManager{
   if(card.id!==selected?.id)this.cardManager.select(card.id);
   return this.action('summon',{card_id:card.id});
  }
- chooseAttack(targetId=this.targetId){
+ chooseAttack(targetId=this.targetId,gestureAttackerId=null){
   const s=this.state;if(!s||this.busy||s.status!=='active')return;
   if(s.active_side!=='player'){toast('Aguarde seu turno para atacar.');return;}
   const available=s.player.field.filter(m=>!m.attacked);
+  const gestureAttacker=gestureAttackerId===null?null:
+   available.find(m=>Number(m.id)===Number(gestureAttackerId));
+  if(gestureAttackerId!==null&&!gestureAttacker){
+   toast('Essa criatura não pode atacar neste turno.');
+   return;
+  }
   if(!available.length){toast(s.player.field.length?'Todas as suas criaturas já atacaram. Encerre o turno para atacar novamente.':'Invoque uma criatura antes de atacar.');return;}
-  const attacker=available.find(m=>Number(m.id)===Number(this.attackerId))||available[0];
+  const attacker=gestureAttacker||available.find(m=>Number(m.id)===Number(this.attackerId))||available[0];
   const target=s.ai.field.find(m=>Number(m.id)===Number(targetId))||s.ai.field[0]||null;
   this.attackerId=attacker.id;this.targetId=target?.id;
   toast(target?attacker.name+' atacando '+target.name+'.':attacker.name+' atacando diretamente os pontos de vida adversários.');
