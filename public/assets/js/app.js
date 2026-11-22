@@ -1,15 +1,15 @@
 
 import {Api} from './Api.js?v=20261122-36';
 import {$,escape,number,toast,modal,HUDManager} from './ui/HUDManager.js?v=20261122-36';
-import {ArenaRenderer} from './game/ArenaRenderer.js?v=20261122-37';
+import {ArenaRenderer} from './game/ArenaRenderer.js?v=20261122-38';
 import {CardManager} from './game/CardManager.js';
 import {AnimationManager} from './game/AnimationManager.js?v=20261122-36';
-import {BattleManager} from './game/BattleManager.js?v=20261122-37';
+import {BattleManager} from './game/BattleManager.js?v=20261122-38';
 import {Multiplayer} from './game/Multiplayer.js?v=20261122-36';
 import {VoiceCall} from './game/VoiceCall.js?v=20261122-36';
-import {ARManager} from './ar/ARManager.js?v=20261122-37';
+import {ARManager} from './ar/ARManager.js?v=20261122-38';
 import {TouchControls} from './ui/TouchControls.js';
-import {HandGestureController} from './game/HandGestureController.js?v=20261122-37';
+import {HandGestureController} from './game/HandGestureController.js?v=20261122-38';
 const api=new Api(),hud=new HUDManager();let cards=[],user=null,arena,ar,cardManager,animation,battle,multiplayer,voice,handGestures=null,activeBattle=null,deckId=null;
 const storage={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
 const sessionSetting={get:k=>{try{return sessionStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{sessionStorage.setItem(k,v)}catch{}}};
@@ -40,33 +40,117 @@ async function init(){
  try{const [catalog,session]=await Promise.all([api.request('cards'),api.session()]);cards=catalog;user=session.user;activeBattle=session.active_battle;if(!cards.length)throw Error('O catálogo está vazio. Execute as migrations e o seeder.');
   arena=new ArenaRenderer($('#scene'),unit=>battle?.pickUnit(unit));cardManager=new CardManager(cards,()=>battle?.update());animation=new AnimationManager(arena,hud,cards);battle=new BattleManager(api,arena,animation,hud,cardManager,result);ar=new ARManager(arena,cards,card=>cardManager.select(card.id),toast);voice=new VoiceCall(api);window.arcanaVoice=voice;multiplayer=new Multiplayer({api,ensureUser,getUser:()=>user,getDeck:()=>deckId,getBattle:()=>battle,onJoined:()=>{activeBattle=null},onResult:result});multiplayer.onEnterRoom=()=>ar.openRoom();multiplayer.start();$('#waiting-room-camera').onclick=()=>ar.startPreferred();$('#online-players').onclick=()=>multiplayer.open();$('#create-room-hero').onclick=()=>multiplayer.create();cardManager.render();await arena.preview(cards);await arena.buildStereoEnvironment(cards);ar.capabilities();arena.setQuality(storage.get('arcana_quality')||'auto');accountLabel();$('#connection span').textContent='Servidor conectado';
   const stereoToggle=$('#stereo-toggle'),stereoExit=$('#stereo-exit'),stereoMotion=$('#stereo-motion');
-  const gestureToggle=$('#gesture-toggle');
+  const gestureToggle=$('#gesture-toggle'),gestureCamera=$('#gesture-camera');
+  const gestureDeck=$('#gesture-deck');
+  const renderGestureDeck=()=>{
+   gestureDeck.hidden=!(arena.stereoEnabled||handGestures.running);
+   if(gestureDeck.hidden)return;
+   const state=battle.state;
+   const hand=state?.status==='active'?state.player.hand:[];
+   const views=arena.stereoEnabled?2:1;
+   const signature=JSON.stringify([views,state?.id,state?.status,hand,battle.busy,!!multiplayer.room]);
+   if(gestureDeck.dataset.rendered===signature)return;
+   gestureDeck.dataset.rendered=signature;
+   const row=document.createElement('div');
+   row.className='gesture-deck-eye';
+   if(!state||state.status==='finished'){
+    const start=document.createElement('button');
+    start.type='button';
+    start.dataset.gestureStart='';
+    start.textContent=multiplayer.room?'Aguardando duelo':'Iniciar duelo';
+    start.disabled=!!multiplayer.room;
+    row.append(start);
+   }else{
+    for(const id of hand){
+     const card=cardManager.cards.find(entry=>Number(entry.id)===Number(id));
+     if(!card)continue;
+     const button=document.createElement('button');
+     button.type='button';
+     button.dataset.gestureCard=card.id;
+     button.dataset.cardName=card.name;
+     button.setAttribute('aria-label','Invocar '+card.name+' por '+card.cost+' de energia');
+     button.disabled=battle.busy;
+     const image=document.createElement('img');
+     image.src=card.image_url;
+     image.alt='';
+     const title=document.createElement('span');
+     title.textContent=card.name;
+     const cost=document.createElement('small');
+     cost.textContent=card.cost+' ◈';
+     button.append(image,title,cost);
+     row.append(button);
+    }
+   }
+   gestureDeck.replaceChildren(row);
+   if(views===2){
+    const otherEye=row.cloneNode(true);
+    otherEye.setAttribute('aria-hidden','true');
+    for(const button of otherEye.querySelectorAll('button'))button.tabIndex=-1;
+    gestureDeck.append(otherEye);
+   }
+  };
+  gestureDeck.onclick=event=>{
+   const button=event.target.closest('button');
+   if(!button||button.disabled)return;
+   if(button.hasAttribute('data-gesture-start'))startBattle();
+   else if(arena.stereoEnabled)battle.summon(Number(button.dataset.gestureCard));
+   else cardManager.select(Number(button.dataset.gestureCard));
+  };
+  const gestureCardAt=({x,y})=>{
+   if(gestureDeck.hidden)return null;
+   const rect=$('#arena-viewport').getBoundingClientRect();
+   const clientX=rect.left+x*rect.width/(arena.stereoEnabled?2:1);
+   const clientY=rect.top+y*rect.height;
+   for(const button of gestureDeck.firstElementChild?.querySelectorAll('[data-gesture-card]')||[]){
+    const bounds=button.getBoundingClientRect();
+    if(clientX>=bounds.left&&clientX<=bounds.right&&clientY>=bounds.top&&clientY<=bounds.bottom){
+     return {kind:'card',id:Number(button.dataset.gestureCard),name:button.dataset.cardName};
+    }
+   }
+   return null;
+  };
   handGestures=new HandGestureController({
    container:$('#arena-viewport'),
    canvas:$('#hand-overlay'),
    status:$('#hand-status'),
    arena,
+   cardAt:gestureCardAt,
+   onSummon:cardId=>battle.summon(cardId),
    onAttack:attackerId=>{
     if(!battle.state){toast('Inicie um duelo antes de atacar com gestos.',true);return;}
     return battle.chooseAttack(undefined,attackerId);
    },
    onStop:()=>{
-    gestureToggle.textContent='Atacar com a mão';
+    gestureToggle.textContent='Ligar câmera e gestos';
     gestureToggle.setAttribute('aria-pressed','false');
+    gestureCamera.hidden=true;
+    renderGestureDeck();
    }
   });
+  battle.onUpdate=renderGestureDeck;
   ar.onBeforeCamera=()=>handGestures.stop();
   gestureToggle.hidden=false;
-  gestureToggle.onclick=async()=>{
-   if(handGestures.operation){handGestures.stop();return;}
+  const startGestures=async(facingMode)=>{
    if(ar.mode!=='3d'||ar.switching){toast('Volte à Arena 3D para usar os gestos.',true);return;}
    gestureToggle.textContent='Cancelar gestos';
    try{
-    if(await handGestures.start()){
-     gestureToggle.textContent='Desativar gestos';
+    if(await handGestures.start(facingMode)){
+     gestureToggle.textContent='Câmera ligada · desligar';
      gestureToggle.setAttribute('aria-pressed','true');
+     gestureCamera.hidden=false;
+     gestureCamera.textContent=handGestures.mirrored?'Usar traseira':'Usar frontal';
+     renderGestureDeck();
     }
    }catch(error){toast(error.message,true);}
+  };
+  gestureToggle.onclick=()=>{
+   if(handGestures.operation)handGestures.stop();
+   else startGestures();
+  };
+  gestureCamera.onclick=()=>{
+   const facingMode=handGestures.mirrored?'environment':'user';
+   handGestures.stop();
+   startGestures(facingMode);
   };
   const updateStereoButton=enabled=>{
    stereoToggle.setAttribute('aria-pressed',String(enabled));
@@ -76,6 +160,7 @@ async function init(){
    document.body.classList.toggle('stereo-mode',enabled);
    handGestures.resetAim();
    arena.setStereoEnabled(enabled);
+   renderGestureDeck();
   };
   updateStereoButton(sessionSetting.get('arcana_stereo')==='on');
   stereoToggle.onclick=()=>{

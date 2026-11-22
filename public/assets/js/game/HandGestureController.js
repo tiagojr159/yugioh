@@ -6,8 +6,8 @@ const HOLD_MS={pinch:160,fist:300};
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 
 export class HandGestureController{
- constructor({container,canvas,status,arena,onAttack,onStop}){
-  Object.assign(this,{container,canvas,status,arena,onAttack,onStop});
+ constructor({container,canvas,status,arena,cardAt,onSummon,onAttack,onStop}){
+  Object.assign(this,{container,canvas,status,arena,cardAt,onSummon,onAttack,onStop});
   this.video=document.createElement('video');
   this.video.playsInline=true;
   this.video.muted=true;
@@ -20,19 +20,21 @@ export class HandGestureController{
   });
   this.running=false;
  }
- async start(){
+ async start(facingMode='user'){
   if(this.operation)return false;
   const operation=this.operation={};
-  this.setStatus('Aguardando a câmera frontal…');
+  this.setStatus('Aguardando a câmera…');
   try{
    if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){
     throw Error('Abra a arena por HTTPS para usar a câmera.');
    }
    const stream=await navigator.mediaDevices.getUserMedia({
-    audio:false,video:{facingMode:{ideal:'user'},width:{ideal:640},height:{ideal:480}}
+    audio:false,video:{facingMode:{ideal:facingMode},width:{ideal:640},height:{ideal:480}}
    });
    if(this.operation!==operation){stream.getTracks().forEach(track=>track.stop());return false;}
    this.stream=stream;
+   this.facingMode=stream.getVideoTracks()[0]?.getSettings().facingMode||facingMode;
+   this.mirrored=this.facingMode!=='environment';
    for(const track of stream.getVideoTracks()){
     track.addEventListener('ended',()=>{
      if(this.operation===operation)this.stop('Câmera desconectada. Toque para tentar de novo.');
@@ -60,12 +62,12 @@ export class HandGestureController{
    this.running=true;
    this.resize();
    this.observer.observe(this.container);
-   this.setStatus('Mostre a palma à câmera frontal.');
+   this.setStatus('Mostre a palma à câmera.');
    this.raf=requestAnimationFrame(now=>this.frame(now));
    return true;
   }catch(error){
    if(this.operation!==operation)return false;
-   const message=error.name==='NotAllowedError'?'Autorize a câmera frontal para usar os gestos.':
+   const message=error.name==='NotAllowedError'?'Autorize a câmera para usar os gestos.':
     error.message||'Não foi possível carregar os gestos.';
    this.stop(message);
    throw Error(message);
@@ -91,25 +93,33 @@ export class HandGestureController{
    const result=this.detector.detectForVideo(this.video,now);
    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
    const points=result.landmarks?.[0];
+   const views=this.arena.stereoEnabled?2:1;
+   const width=Math.floor(this.canvas.width/views);
+   const height=this.canvas.height;
+   if(!width||!height)return;
    if(!points){
-    this.aim=null;
-    this.hold=null;
-    this.setStatus('Mostre a mão à câmera frontal. Afaste-a um pouco se estiver muito perto.');
+    this.resetAim();
+    this.drawCameraPreview(width,height,views);
+    this.setStatus('Câmera ligada · mostre a palma na miniatura e afaste a mão um pouco.');
     return;
    }
    const gesture=this.classify(result.worldLandmarks?.[0]||points);
-   const width=this.arena.stereoEnabled?Math.floor(this.canvas.width/2):this.canvas.width;
-   const height=this.canvas.height;
-   if(!width||!height)return;
    const sw=this.video.videoWidth,sh=this.video.videoHeight;
    const scale=Math.min(width/sw,height/sh);
    const vw=sw*scale,vh=sh*scale;
    const left=(width-vw)/2,top=(height-vh)/2;
-   const map=point=>({x:left+(1-point.x)*vw,y:top+point.y*vh});
+   const map=point=>({x:left+(this.mirrored?1-point.x:point.x)*vw,y:top+point.y*vh});
    const anchor=map(gesture==='fist'?points[9]:points[8]);
    const position={x:anchor.x/width,y:anchor.y/height};
    const aimGesture=gesture==='open'||gesture==='point';
-   const hit=aimGesture?this.arena.gestureCreatureAt(position.x,position.y):null;
+   let hit=null;
+   if(aimGesture){
+    hit=this.cardAt?.(position);
+    if(!hit){
+     const unit=this.arena.gestureCreatureAt(position.x,position.y);
+     if(unit)hit={kind:'creature',id:unit.id,name:unit.name,blocked:unit.attacked};
+    }
+   }
    this.updateGesture(gesture,hit,position,now);
    this.drawHand(points.map(map),anchor,{left,top,vw,vh,width,height},!!hit||!!this.hold);
   }catch(error){
@@ -123,8 +133,12 @@ export class HandGestureController{
   const extended=[8,12,16,20].map(tip=>
    distance(points[tip],points[0])-distance(points[tip-2],points[0])>palm*.18
   );
-  if(distance(points[4],points[8])<palm*.27)return 'pinch';
-  if(extended.every(value=>!value))return 'fist';
+  const fingersCurled=extended.every(value=>!value)&&
+   [8,12,16,20].every(tip=>distance(points[tip],points[0])<palm*1.22);
+  const pinch=distance(points[4],points[8])<palm*.30;
+  // A pinça pode formar um círculo com o indicador, mesmo com os outros dedos dobrados.
+  if(pinch&&(!fingersCurled||distance(points[8],points[5])>palm*.55))return 'pinch';
+  if(fingersCurled)return 'fist';
   if(extended.every(Boolean))return 'open';
   if(extended[0]&&extended.slice(1).every(value=>!value))return 'point';
   return 'other';
@@ -133,42 +147,66 @@ export class HandGestureController{
   if(gesture==='open'||gesture==='point'){
    this.released=true;
    this.hold=null;
-   if(!hit||hit.attacked){
+   if(!hit||hit.blocked){
     if(this.aim&&!this.aim.ready)this.aim=null;
-    this.setStatus(hit?.attacked?'Essa criatura já atacou.':'Mire sobre uma criatura sua que já esteja no campo.');
+    if(hit?.blocked)this.aim=null;
+    this.setStatus(hit?.blocked?'Essa criatura já atacou.':'Mire sobre uma carta ou criatura sua.');
     return;
    }
-   if(this.aim?.unit.id!==hit.id||now-this.aim.lastSeen>220){
-    this.aim={unit:hit,since:now};
+   if(!this.aim||this.aim.target.kind!==hit.kind||this.aim.target.id!==hit.id||now-this.aim.lastSeen>220){
+    this.aim={target:hit,since:now};
    }
    Object.assign(this.aim,{position,lastSeen:now,ready:now-this.aim.since>=AIM_MS});
-   this.setStatus(this.aim.ready?hit.name+' · Faça uma pinça ou feche a mão.':'Mirando em '+hit.name+'…');
+   const instruction=hit.kind==='card'?'Faça uma pinça para invocar.':'Feche a mão para atacar.';
+   this.setStatus(this.aim.ready?hit.name+' · '+instruction:'Mirando em '+hit.name+'…');
    return;
   }
   const duration=HOLD_MS[gesture];
   if(!duration||!this.released){
    this.hold=null;
-   if(this.released)this.setStatus('Abra a mão ou aponte para uma criatura sua.');
+   if(this.released)this.setStatus('Abra a mão ou aponte para mirar.');
    return;
   }
   const aim=this.aim;
   const near=aim&&Math.hypot(position.x-aim.position.x,position.y-aim.position.y)<.22;
   if(!aim?.ready||!near||(!this.hold&&now-aim.lastSeen>500)){
    this.hold=null;
-   this.setStatus('Abra a mão ou aponte sobre sua criatura antes do ataque.');
+   this.setStatus('Aponte sobre uma carta ou criatura antes de fazer o gesto.');
+   return;
+  }
+  const summoning=aim.target.kind==='card';
+  if(gesture!==(summoning?'pinch':'fist')){
+   this.hold=null;
+   this.setStatus(summoning?'Faça uma pinça sobre a carta para invocar.':'Feche o punho sobre sua criatura para atacar.');
    return;
   }
   if(this.hold?.gesture!==gesture)this.hold={gesture,since:now};
   if(now-this.hold.since<duration){
-   this.setStatus(aim.unit.name+' · Segure o gesto…');
+   this.setStatus(aim.target.name+' · Segure o gesto…');
    return;
   }
   this.released=false;
   this.aim=null;
   this.hold=null;
-  const requested=this.onAttack(aim.unit.id);
-  this.setStatus(requested?'Comando de ataque enviado · abra a mão para mirar de novo.':
-   'Ataque indisponível · abra a mão para tentar de novo.');
+  const requested=summoning?this.onSummon(aim.target.id):this.onAttack(aim.target.id);
+  this.setStatus(requested?(summoning?'Invocação enviada':'Ataque enviado')+' · abra a mão para mirar de novo.':
+   'Ação indisponível · abra a mão para tentar de novo.');
+ }
+ drawCameraPreview(width,height,views){
+  const ctx=this.ctx;
+  const previewWidth=Math.min(width*.32,height*.31);
+  const previewHeight=previewWidth*this.video.videoHeight/this.video.videoWidth;
+  for(let eye=0;eye<views;eye++){
+   const left=eye*width+width-previewWidth-10,top=height*.18;
+   ctx.save();
+   ctx.translate(left+(this.mirrored?previewWidth:0),top);
+   if(this.mirrored)ctx.scale(-1,1);
+   ctx.drawImage(this.video,0,0,previewWidth,previewHeight);
+   ctx.restore();
+   ctx.strokeStyle='#a5ffd4';
+   ctx.lineWidth=2;
+   ctx.strokeRect(left,top,previewWidth,previewHeight);
+  }
  }
  drawHand(points,anchor,{left,top,vw,vh,width,height},aimed){
   if(this.mask.width!==width)this.mask.width=width;
@@ -187,10 +225,18 @@ export class HandGestureController{
   mask.closePath();
   mask.fill();
   mask.stroke();
+  mask.beginPath();
+  for(const index of [0,1,5,9,13,17]){
+   const {x,y}=points[index];
+   if(index===0)mask.moveTo(x,y);
+   else mask.lineTo(x,y);
+  }
+  mask.closePath();
+  mask.fill();
   mask.save();
   mask.globalCompositeOperation='source-in';
-  mask.translate(left+vw,top);
-  mask.scale(-1,1);
+  mask.translate(left+(this.mirrored?vw:0),top);
+  if(this.mirrored)mask.scale(-1,1);
   mask.drawImage(this.video,0,0,vw,vh);
   mask.restore();
 

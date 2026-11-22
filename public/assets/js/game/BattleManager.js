@@ -14,18 +14,20 @@ export class BattleManager{
   this.cardManager.render(s.player.hand);this.update();
   await this.arena.sync(s,this.cardManager.cards);this.arena.arAdapter?.syncState?.(s);
  }
- update(){this.hud.update(this.state,this.cardManager.selected,this.user,this.busy,this.cardManager.cards);if(this.arena?.roomWaiting&&!this.state){$('#arena-caption').hidden=true;$('#opponent-name').textContent='Aguardando jogador';$('#turn-indicator').textContent='SALA ABERTA - AGUARDANDO JOGADOR';}}
+ update(){this.hud.update(this.state,this.cardManager.selected,this.user,this.busy,this.cardManager.cards);if(this.arena?.roomWaiting&&!this.state){$('#arena-caption').hidden=true;$('#opponent-name').textContent='Aguardando jogador';$('#turn-indicator').textContent='SALA ABERTA - AGUARDANDO JOGADOR';}this.onUpdate?.();}
  async action(action,data={}){
   if(this.busy||!this.state)return;this.busy=true;this.update();document.body.classList.add('busy');
   try{const s=await this.api.request(this.path(this.state.id)+'/'+action,{method:'POST',data:{...data,version:this.state.version}});try{await this.animation.play(s.events)}catch(e){console.warn('Animação interrompida:',e.message)}await this.setState(s);if(s.status==='finished')this.onResult(s);}
   catch(e){toast(e.message,true);if([0,409].includes(e.status)){try{await this.load(this.state.id);toast('Partida sincronizada. Você pode continuar.')}catch{}}}
   finally{this.busy=false;document.body.classList.remove('busy');this.update();}
  }
- summon(){
-  const s=this.state,selected=this.cardManager.selected;
+ summon(cardId=null){
+  const s=this.state;
+  const selected=cardId===null?this.cardManager.selected:this.cardManager.cards.find(card=>Number(card.id)===Number(cardId));
   const reason=summonReason(s,this.cardManager.cards,selected,this.busy);if(reason){toast(reason);return;}
   const card=summonCard(s,this.cardManager.cards,selected);
-  if(card.id!==selected?.id)this.cardManager.select(card.id);
+  if(cardId!==null&&Number(card.id)!==Number(cardId)){toast('Essa carta não pode ser invocada agora.');return;}
+  if(card.id!==this.cardManager.selected?.id)this.cardManager.select(card.id);
   return this.action('summon',{card_id:card.id});
  }
  chooseAttack(targetId=this.targetId,gestureAttackerId=null){

@@ -30,11 +30,60 @@
 
 .stereo-motion{display:none}body.stereo-mode .stereo-motion{display:block;position:absolute;z-index:5;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));padding:8px 13px;border:1px solid #87beb580;border-radius:99px;background:#0c131ce8;color:#c9eadb;font-size:11px;white-space:nowrap;backdrop-filter:blur(10px)}body.stereo-mode .stereo-exit{left:auto;right:max(10px,env(safe-area-inset-right));transform:none}
 
-#hand-overlay{position:absolute;inset:0;width:100%;height:100%;z-index:8;pointer-events:none}
+#arena-viewport{isolation:isolate}
+#arena-viewport:has(#gesture-toggle[aria-pressed="true"]) #scene{z-index:0}
+#hand-overlay{position:absolute;inset:0;width:100%;height:100%;z-index:20;pointer-events:none}
 
 /* Camera hand passthrough and gesture controls, both in normal and stereo arena. */
 #hand-status:not([hidden]){display:block;position:absolute;z-index:9;left:50%;bottom:max(58px,calc(env(safe-area-inset-bottom) + 58px));transform:translateX(-50%);max-width:min(88vw,520px);padding:9px 14px;border:1px solid #8bd4bd66;border-radius:999px;background:#07141ddf;color:#d2eee3;font-size:11px;text-align:center;backdrop-filter:blur(10px);pointer-events:none}
 #gesture-toggle:not([hidden]){display:block;position:absolute;z-index:10;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));padding:10px 16px;border:1px solid #8bd4bd80;border-radius:999px;background:#14271fee;color:#e6f3eb;font-size:12px;white-space:nowrap}
-body.stereo-mode #gesture-toggle:not([hidden]){left:50%;right:auto;transform:translateX(-50%)}
+body.stereo-mode #gesture-toggle:not([hidden]){
+ left:50%;right:auto;bottom:auto;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);
+}
+#gesture-toggle:not([hidden]){z-index:22}
+#gesture-toggle[aria-pressed="true"]{background:#1d4538;border-color:#a5ffd4}
+#gesture-camera:not([hidden]){
+ position:absolute;z-index:22;left:max(12px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom));
+ padding:8px 11px;border:1px solid #8bd4bd80;border-radius:999px;background:#14271fee;color:#e6f3eb;font-size:11px;
+}
+.stereo-mode #gesture-camera:not([hidden]){
+ left:50%;bottom:auto;top:calc(max(10px,env(safe-area-inset-top)) + 37px);transform:translateX(-50%);
+}
+#hand-status:not([hidden]){z-index:21}
+body.stereo-mode #hand-status:not([hidden]){bottom:max(5px,env(safe-area-inset-bottom));padding:5px 10px;width:max-content;max-width:90vw}
+.stereo-mode #stereo-exit,.stereo-mode #stereo-motion{z-index:22}
 
-body.ar-active #gesture-toggle,body.ar-active #hand-overlay,body.ar-active #hand-status{display:none!important}
+#gesture-deck:not([hidden]){
+ position:absolute;z-index:11;inset-inline:0;bottom:98px;
+ display:flex;pointer-events:none;
+}
+.stereo-mode #gesture-deck:not([hidden]){
+ bottom:calc(max(8px,env(safe-area-inset-bottom)) + 31px);
+}
+.gesture-deck-eye{
+ display:flex;flex:1 1 0;min-width:0;justify-content:center;gap:clamp(2px,1vw,9px);
+ padding-inline:5px;
+}
+.gesture-deck-eye button{
+ position:relative;pointer-events:auto;background:#0b1720;border:1px solid #8bd4bd95;
+ border-radius:6px;color:#e6f3eb;overflow:hidden;flex-shrink:1;min-width:0;
+}
+.gesture-deck-eye [data-gesture-card]{
+ width:clamp(30px,8vw,74px);height:clamp(46px,20vh,90px);padding:0;
+}
+.gesture-deck-eye [data-gesture-card] img{width:100%;height:100%;object-fit:cover;display:block}
+.gesture-deck-eye [data-gesture-card] span{
+ position:absolute;inset-inline:0;bottom:0;background:#08131ded;padding:3px 2px;
+ font-size:clamp(8px,1.5vw,11px);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.gesture-deck-eye [data-gesture-card] small{
+ position:absolute;top:2px;left:2px;padding:2px 3px;border-radius:4px;background:#08131ded;font-size:9px;
+}
+.gesture-deck-eye [data-gesture-start]{padding:8px 12px;font-size:12px}
+.gesture-deck-eye button:disabled{opacity:.65}
+@media(max-width:520px){
+ body.stereo-mode #gesture-toggle:not([hidden]){top:calc(max(10px,env(safe-area-inset-top)) + 36px)}
+ body.stereo-mode #gesture-camera:not([hidden]){top:calc(max(10px,env(safe-area-inset-top)) + 73px)}
+}
+
+body.ar-active #gesture-toggle,body.ar-active #gesture-camera,body.ar-active #hand-overlay,body.ar-active #hand-status,body.ar-active #gesture-deck{display:none!important}
