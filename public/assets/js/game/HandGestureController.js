@@ -1,5 +1,4 @@
-const VISION_CDN='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32';
-const MODEL_URL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const VISION_ASSETS=new URL('../../vendor/mediapipe/0.10.32/',import.meta.url);
 const OUTLINE=[0,1,2,3,4,8,7,6,5,9,10,11,12,16,15,14,13,17,18,19,20];
 const AIM_MS=140;
 const HOLD_MS={pinch:160,fist:300};
@@ -67,11 +66,11 @@ export class HandGestureController{
    this.observer.observe(this.container);
    this.setStatus('Carregando o rastreador de mãos…');
    this.raf=requestAnimationFrame(now=>this.frame(now));
-   const {FilesetResolver,HandLandmarker}=await import(VISION_CDN+'/vision_bundle.mjs');
-   const files=await FilesetResolver.forVisionTasks(VISION_CDN+'/wasm');
+   const {FilesetResolver,HandLandmarker}=await import(new URL('vision_bundle.js',VISION_ASSETS).href);
+   const files=await FilesetResolver.forVisionTasks(new URL('wasm',VISION_ASSETS).href);
    if(this.operation!==operation)return false;
    const detector=await HandLandmarker.createFromOptions(files,{
-    baseOptions:{modelAssetPath:MODEL_URL},
+    baseOptions:{modelAssetPath:new URL('hand_landmarker.task',VISION_ASSETS).href},
     runningMode:'VIDEO',
     numHands:1,
     minHandDetectionConfidence:.5,
@@ -85,8 +84,12 @@ export class HandGestureController{
    return true;
   }catch(error){
    if(this.operation!==operation)return false;
-   const message=error.name==='NotAllowedError'?'Autorize a câmera para usar os gestos.':
-    error.message||'Não foi possível carregar os gestos.';
+   let message=error.message||'Não foi possível ligar a câmera.';
+   if(error.name==='NotAllowedError')message='Autorize a câmera para usar os gestos.';
+   else if(this.video.readyState>=2){
+    console.error('Não foi possível carregar os arquivos do rastreador de mãos:',error);
+    message='Falha ao carregar o rastreador de mãos. Toque em Ligar câmera e gestos para tentar novamente.';
+   }
    this.stop(message);
    throw Error(message);
   }

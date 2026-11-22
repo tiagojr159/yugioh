@@ -15,6 +15,7 @@
 !/storage/rate-limits/.gitkeep
 /public/assets/vendor/*
 !/public/assets/vendor/ar-threex.mjs
+!/public/assets/vendor/mediapipe/
 /public/uploads/*
 !/public/uploads/.htaccess
 /tests/.runtime/
