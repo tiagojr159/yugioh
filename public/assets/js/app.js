@@ -9,7 +9,7 @@ import {Multiplayer} from './game/Multiplayer.js?v=20261122-36';
 import {VoiceCall} from './game/VoiceCall.js?v=20261122-36';
 import {ARManager} from './ar/ARManager.js?v=20261122-38';
 import {TouchControls} from './ui/TouchControls.js';
-import {HandGestureController} from './game/HandGestureController.js?v=20261122-40';
+import {HandGestureController} from './game/HandGestureController.js?v=20261122-41';
 const api=new Api(),hud=new HUDManager();let cards=[],user=null,arena,ar,cardManager,animation,battle,multiplayer,voice,handGestures=null,activeBattle=null,deckId=null;
 const storage={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
 const sessionSetting={get:k=>{try{return sessionStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{sessionStorage.setItem(k,v)}catch{}}};
@@ -111,7 +111,6 @@ async function init(){
   };
   handGestures=new HandGestureController({
    container:$('#arena-viewport'),
-   canvas:$('#hand-overlay'),
    status:$('#hand-status'),
    arena,
    cardAt:gestureCardAt,
